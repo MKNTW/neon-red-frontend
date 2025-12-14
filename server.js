@@ -231,36 +231,66 @@ app.post('/api/register', async (req, res) => {
 
         if (error) throw error;
 
-        // Генерируем код подтверждения
-        const code = generateCode();
-        const codeHash = await bcrypt.hash(code, 10);
-
-        // Сохраняем код в таблицу email_verifications
-        const { error: codeError } = await supabase
+        // Проверяем, есть ли активный временный код для этого email
+        const { data: tempCode } = await supabase
             .from('email_verifications')
-            .insert([{
-                user_id: user.id,
-                code_hash: codeHash,
-                expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(), // 10 минут
-                last_sent_at: new Date().toISOString()
-            }]);
+            .select('*')
+            .eq('email', cleanEmail)
+            .is('user_id', null)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
 
-        if (codeError) {
-            console.error('Error saving verification code:', codeError);
-            // Удаляем пользователя, если не удалось сохранить код
-            await supabase.from('users').delete().eq('id', user.id);
-            throw new Error('Ошибка при создании кода подтверждения');
-        }
+        let code, codeHash;
 
-        // Отправляем код на email
-        try {
-            await sendVerificationCode(cleanEmail, code);
-        } catch (emailError) {
-            console.error('Error sending email:', emailError);
-            // Удаляем пользователя и код, если не удалось отправить email
-            await supabase.from('email_verifications').delete().eq('user_id', user.id);
-            await supabase.from('users').delete().eq('id', user.id);
-            throw new Error('Ошибка при отправке кода подтверждения на email');
+        if (tempCode && new Date(tempCode.expires_at) > new Date()) {
+            // Используем существующий временный код
+            // Обновляем его, привязывая к user_id
+            const { error: updateError } = await supabase
+                .from('email_verifications')
+                .update({ user_id: user.id })
+                .eq('id', tempCode.id);
+
+            if (updateError) {
+                console.error('Error updating temp code:', updateError);
+                await supabase.from('users').delete().eq('id', user.id);
+                throw new Error('Ошибка при обновлении кода');
+            }
+
+            // Код уже был отправлен ранее, не отправляем повторно
+        } else {
+            // Генерируем новый код подтверждения
+            code = generateCode();
+            codeHash = await bcrypt.hash(code, 10);
+
+            // Сохраняем код в таблицу email_verifications
+            const { error: codeError } = await supabase
+                .from('email_verifications')
+                .insert([{
+                    user_id: user.id,
+                    email: cleanEmail,
+                    code_hash: codeHash,
+                    expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(), // 10 минут
+                    last_sent_at: new Date().toISOString()
+                }]);
+
+            if (codeError) {
+                console.error('Error saving verification code:', codeError);
+                // Удаляем пользователя, если не удалось сохранить код
+                await supabase.from('users').delete().eq('id', user.id);
+                throw new Error('Ошибка при создании кода подтверждения');
+            }
+
+            // Отправляем код на email
+            try {
+                await sendVerificationCode(cleanEmail, code);
+            } catch (emailError) {
+                console.error('Error sending email:', emailError);
+                // Удаляем пользователя и код, если не удалось отправить email
+                await supabase.from('email_verifications').delete().eq('user_id', user.id);
+                await supabase.from('users').delete().eq('id', user.id);
+                throw new Error('Ошибка при отправке кода подтверждения на email');
+            }
         }
 
         res.status(201).json({
@@ -280,6 +310,113 @@ app.post('/api/register', async (req, res) => {
         });
         res.status(500).json({ 
             error: 'Ошибка регистрации',
+            message: error.message || 'Неизвестная ошибка'
+        });
+    }
+});
+
+// Отправка кода проверки email (до регистрации)
+app.post('/api/send-email-code', async (req, res) => {
+    try {
+        const { email } = req.body;
+
+        if (!email) {
+            return res.status(400).json({ error: 'Требуется email' });
+        }
+
+        const cleanEmail = email.trim().toLowerCase();
+
+        // Валидация email
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(cleanEmail)) {
+            return res.status(400).json({ error: 'Неверный формат email' });
+        }
+
+        // Проверяем, не зарегистрирован ли уже этот email
+        const { data: existingUser } = await supabase
+            .from('users')
+            .select('id, email_verified')
+            .eq('email', cleanEmail)
+            .maybeSingle();
+
+        if (existingUser) {
+            if (existingUser.email_verified) {
+                return res.status(400).json({ error: 'Этот email уже зарегистрирован и подтверждён' });
+            }
+            // Если email зарегистрирован, но не подтверждён, используем существующую логику
+            return res.status(400).json({ error: 'Этот email уже зарегистрирован. Используйте повторную отправку кода.' });
+        }
+
+        // Проверяем последнюю отправку для этого email (временные коды)
+        const { data: lastTemp } = await supabase
+            .from('email_verifications')
+            .select('*')
+            .eq('email', cleanEmail)
+            .is('user_id', null)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+        if (lastTemp && lastTemp.last_sent_at) {
+            const diff = Date.now() - new Date(lastTemp.last_sent_at).getTime();
+            if (diff < 60000) {
+                const secondsLeft = Math.ceil((60000 - diff) / 1000);
+                return res.status(429).json({
+                    error: 'Подождите перед повторной отправкой',
+                    message: `Подождите ${secondsLeft} секунд перед повторной отправкой`
+                });
+            }
+
+            // Удаляем старый временный код
+            await supabase
+                .from('email_verifications')
+                .delete()
+                .eq('id', lastTemp.id);
+        }
+
+        // Генерируем код
+        const code = generateCode();
+        const codeHash = await bcrypt.hash(code, 10);
+
+        // Сохраняем временный код (без user_id, только email)
+        // Сначала удаляем старые временные коды для этого email
+        await supabase
+            .from('email_verifications')
+            .delete()
+            .eq('email', cleanEmail)
+            .is('user_id', null);
+
+        const { error: insertError } = await supabase
+            .from('email_verifications')
+            .insert([{
+                email: cleanEmail,
+                code_hash: codeHash,
+                expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+                last_sent_at: new Date().toISOString()
+            }]);
+
+        if (insertError) {
+            console.error('Error saving email verification code:', insertError);
+            throw new Error('Ошибка при создании кода');
+        }
+
+        // Отправляем код
+        try {
+            await sendVerificationCode(cleanEmail, code);
+        } catch (emailError) {
+            console.error('Error sending email:', emailError);
+            throw new Error('Ошибка при отправке кода на email');
+        }
+
+        res.json({
+            success: true,
+            message: 'Код подтверждения отправлен на почту'
+        });
+
+    } catch (error) {
+        console.error('Send email code error:', error);
+        res.status(500).json({ 
+            error: 'Ошибка отправки кода',
             message: error.message || 'Неизвестная ошибка'
         });
     }
@@ -317,14 +454,35 @@ app.post('/api/confirm-email', async (req, res) => {
             return res.status(400).json({ error: 'Email уже подтверждён' });
         }
 
-        // Находим последний код подтверждения
-        const { data: record, error: recordError } = await supabase
+        // Находим последний код подтверждения (по user_id или email)
+        let record, recordError;
+        
+        // Сначала ищем по user_id
+        const { data: recordByUserId, error: errorByUserId } = await supabase
             .from('email_verifications')
             .select('*')
             .eq('user_id', user.id)
             .order('created_at', { ascending: false })
             .limit(1)
             .maybeSingle();
+            
+        if (recordByUserId) {
+            record = recordByUserId;
+            recordError = errorByUserId;
+        } else {
+            // Если не нашли по user_id, ищем по email (временный код)
+            const { data: recordByEmail, error: errorByEmail } = await supabase
+                .from('email_verifications')
+                .select('*')
+                .eq('email', cleanEmail)
+                .is('user_id', null)
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+                
+            record = recordByEmail;
+            recordError = errorByEmail;
+        }
 
         if (recordError) {
             console.error('Error finding verification code:', recordError);

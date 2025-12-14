@@ -2347,6 +2347,9 @@ class NeonShop {
             
             this.registerData.email = email;
             this.hideFieldError('email-error');
+            
+            // Автоматически отправляем код проверки email
+            this.sendEmailVerificationCode(email);
         } else if (currentStep === 3) {
             const fullName = document.getElementById('register-fullname')?.value.trim();
             this.registerData.fullName = fullName;
@@ -2627,6 +2630,32 @@ class NeonShop {
                 resendBtn.disabled = false;
             }
         }, 1000);
+    }
+
+    async sendEmailVerificationCode(email) {
+        try {
+            const response = await safeFetch(`${this.API_BASE_URL}/send-email-code`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email })
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                this.pendingVerificationEmail = email;
+                this.showToast('Код подтверждения отправлен на почту', 'success');
+            } else {
+                // Не показываем ошибку, если email уже зарегистрирован - это нормально
+                if (!data.error || !data.error.includes('уже зарегистрирован')) {
+                    this.showToast(data.error || data.message || 'Ошибка отправки кода', 'error');
+                }
+            }
+        } catch (error) {
+            // Не показываем ошибку, если это просто проблема с отправкой
+            // Код будет отправлен при регистрации
+            console.log('Email code send error (non-critical):', error.message);
+        }
     }
 
     async validateToken() {
