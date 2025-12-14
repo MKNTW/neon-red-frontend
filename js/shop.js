@@ -331,6 +331,5 @@ export class NeonShop {
 }
 
 // Экспортируем для использования в других модулях
-export { NeonShop };
 export default NeonShop;
 
