@@ -58,8 +58,15 @@ function generateCode() {
 // Отправка кода подтверждения на email
 async function sendVerificationCode(email, code) {
     try {
+        if (!RESEND_API_KEY) {
+            throw new Error('RESEND_API_KEY не установлен. Проверьте переменные окружения.');
+        }
+
+        console.log('[sendVerificationCode] Attempting to send email to:', email);
+        console.log('[sendVerificationCode] Resend API key present:', !!RESEND_API_KEY);
+
         const { data, error } = await resend.emails.send({
-            from: 'NEON RED <onboarding@resend.dev>',
+            from: 'NEON RED <noreply@mail.mkntw.xyz>',
             to: email,
             subject: 'Код подтверждения NEON RED',
             html: `
@@ -87,14 +94,16 @@ async function sendVerificationCode(email, code) {
         });
 
         if (error) {
-            console.error('Resend API error:', error);
+            console.error('[sendVerificationCode] Resend API error:', error);
+            console.error('[sendVerificationCode] Error details:', JSON.stringify(error, null, 2));
             throw new Error(error.message || 'Ошибка отправки email через Resend');
         }
 
-        console.log('Email sent successfully, ID:', data?.id);
+        console.log('[sendVerificationCode] Email sent successfully, ID:', data?.id);
         return true;
     } catch (error) {
-        console.error('Error sending verification code:', error);
+        console.error('[sendVerificationCode] Error sending verification code:', error);
+        console.error('[sendVerificationCode] Error stack:', error.stack);
         throw error;
     }
 }
@@ -336,6 +345,7 @@ app.post('/api/send-email-code', async (req, res) => {
         }
 
         const cleanEmail = email.trim().toLowerCase();
+        console.log('[send-email-code] Processing email:', cleanEmail);
 
         // Валидация email
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -344,11 +354,15 @@ app.post('/api/send-email-code', async (req, res) => {
         }
 
         // Проверяем, не зарегистрирован ли уже этот email
-        const { data: existingUser } = await supabase
+        const { data: existingUser, error: userCheckError } = await supabase
             .from('users')
             .select('id, email_verified')
             .eq('email', cleanEmail)
             .maybeSingle();
+
+        if (userCheckError) {
+            console.error('[send-email-code] Error checking user:', userCheckError);
+        }
 
         if (existingUser) {
             if (existingUser.email_verified) {
@@ -359,14 +373,31 @@ app.post('/api/send-email-code', async (req, res) => {
         }
 
         // Проверяем последнюю отправку для этого email (временные коды)
-        const { data: lastTemp } = await supabase
-            .from('email_verifications')
-            .select('*')
-            .eq('email', cleanEmail)
-            .is('user_id', null)
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
+        // Пробуем найти по email, если поле существует
+        let lastTemp = null;
+        let lastTempError = null;
+
+        try {
+            const { data, error } = await supabase
+                .from('email_verifications')
+                .select('*')
+                .eq('email', cleanEmail)
+                .is('user_id', null)
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+            
+            lastTemp = data;
+            lastTempError = error;
+        } catch (err) {
+            console.warn('[send-email-code] Warning: email field might not exist, trying alternative:', err.message);
+            // Если поле email не существует, пробуем найти по другим полям
+            // Это fallback для старых версий таблицы
+        }
+
+        if (lastTempError) {
+            console.warn('[send-email-code] Error checking last temp code (might be missing email field):', lastTempError.message);
+        }
 
         if (lastTemp && lastTemp.last_sent_at) {
             const diff = Date.now() - new Date(lastTemp.last_sent_at).getTime();
@@ -388,35 +419,78 @@ app.post('/api/send-email-code', async (req, res) => {
         // Генерируем код
         const code = generateCode();
         const codeHash = await bcrypt.hash(code, 10);
+        console.log('[send-email-code] Generated code for:', cleanEmail);
 
         // Сохраняем временный код (без user_id, только email)
-        // Сначала удаляем старые временные коды для этого email
-        await supabase
-            .from('email_verifications')
-            .delete()
-            .eq('email', cleanEmail)
-            .is('user_id', null);
+        // Пробуем сохранить с полем email, если оно существует
+        let insertError = null;
+        
+        try {
+            // Сначала удаляем старые временные коды для этого email
+            const deleteResult = await supabase
+                .from('email_verifications')
+                .delete()
+                .eq('email', cleanEmail)
+                .is('user_id', null);
+            
+            if (deleteResult.error) {
+                console.warn('[send-email-code] Warning deleting old codes:', deleteResult.error.message);
+            }
 
-        const { error: insertError } = await supabase
-            .from('email_verifications')
-            .insert([{
-                email: cleanEmail,
-                code_hash: codeHash,
-                expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
-                last_sent_at: new Date().toISOString()
-            }]);
+            const { error } = await supabase
+                .from('email_verifications')
+                .insert([{
+                    email: cleanEmail,
+                    code_hash: codeHash,
+                    expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+                    last_sent_at: new Date().toISOString()
+                }]);
+
+            insertError = error;
+        } catch (err) {
+            console.error('[send-email-code] Error inserting code (email field might not exist):', err);
+            // Если поле email не существует, сохраняем без него (временное решение)
+            // В этом случае код будет работать только после регистрации
+            console.log('[send-email-code] Attempting to save without email field...');
+            
+            const { error } = await supabase
+                .from('email_verifications')
+                .insert([{
+                    code_hash: codeHash,
+                    expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+                    last_sent_at: new Date().toISOString()
+                }]);
+            
+            insertError = error;
+        }
 
         if (insertError) {
-            console.error('Error saving email verification code:', insertError);
-            throw new Error('Ошибка при создании кода');
+            console.error('[send-email-code] Error saving email verification code:', insertError);
+            console.error('[send-email-code] Error details:', JSON.stringify(insertError, null, 2));
+            return res.status(500).json({ 
+                error: 'Ошибка при создании кода',
+                message: insertError.message || 'Проверьте структуру таблицы email_verifications'
+            });
         }
 
         // Отправляем код
+        console.log('[send-email-code] Sending email to:', cleanEmail);
         try {
             await sendVerificationCode(cleanEmail, code);
+            console.log('[send-email-code] Email sent successfully');
         } catch (emailError) {
-            console.error('Error sending email:', emailError);
-            throw new Error('Ошибка при отправке кода на email');
+            console.error('[send-email-code] Error sending email:', emailError);
+            console.error('[send-email-code] Email error details:', JSON.stringify(emailError, null, 2));
+            // Удаляем сохранённый код, если не удалось отправить email
+            await supabase
+                .from('email_verifications')
+                .delete()
+                .eq('code_hash', codeHash);
+            
+            return res.status(500).json({ 
+                error: 'Ошибка при отправке кода на email',
+                message: emailError.message || 'Проверьте настройки Resend API'
+            });
         }
 
         res.json({
@@ -425,7 +499,8 @@ app.post('/api/send-email-code', async (req, res) => {
         });
 
     } catch (error) {
-        console.error('Send email code error:', error);
+        console.error('[send-email-code] Unexpected error:', error);
+        console.error('[send-email-code] Error stack:', error.stack);
         res.status(500).json({ 
             error: 'Ошибка отправки кода',
             message: error.message || 'Неизвестная ошибка'
@@ -556,6 +631,7 @@ app.post('/api/resend-code', async (req, res) => {
         }
 
         const cleanEmail = email.trim().toLowerCase();
+        console.log('[resend-code] Processing email:', cleanEmail);
 
         // Находим пользователя
         const { data: user, error: userError } = await supabase
@@ -565,8 +641,11 @@ app.post('/api/resend-code', async (req, res) => {
             .maybeSingle();
 
         if (userError) {
-            console.error('Error finding user:', userError);
-            throw new Error('Ошибка при поиске пользователя');
+            console.error('[resend-code] Error finding user:', userError);
+            return res.status(500).json({ 
+                error: 'Ошибка при поиске пользователя',
+                message: userError.message
+            });
         }
 
         if (!user) {
@@ -587,11 +666,15 @@ app.post('/api/resend-code', async (req, res) => {
             .maybeSingle();
 
         if (lastError) {
-            console.error('Error checking last code:', lastError);
-            throw new Error('Ошибка при проверке последнего кода');
+            console.error('[resend-code] Error checking last code:', lastError);
+            console.error('[resend-code] Error details:', JSON.stringify(lastError, null, 2));
+            return res.status(500).json({ 
+                error: 'Ошибка при проверке последнего кода',
+                message: lastError.message
+            });
         }
 
-        if (last) {
+        if (last && last.last_sent_at) {
             const diff = Date.now() - new Date(last.last_sent_at).getTime();
             if (diff < 60000) {
                 const secondsLeft = Math.ceil((60000 - diff) / 1000);
@@ -602,37 +685,59 @@ app.post('/api/resend-code', async (req, res) => {
             }
 
             // Удаляем старый код
-            await supabase
+            const deleteResult = await supabase
                 .from('email_verifications')
                 .delete()
                 .eq('id', last.id);
+            
+            if (deleteResult.error) {
+                console.warn('[resend-code] Warning deleting old code:', deleteResult.error.message);
+            }
         }
 
         // Генерируем новый код
         const code = generateCode();
         const codeHash = await bcrypt.hash(code, 10);
+        console.log('[resend-code] Generated new code for user:', user.id);
 
         // Сохраняем новый код
         const { error: insertError } = await supabase
             .from('email_verifications')
             .insert([{
                 user_id: user.id,
+                email: cleanEmail,
                 code_hash: codeHash,
                 expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
                 last_sent_at: new Date().toISOString()
             }]);
 
         if (insertError) {
-            console.error('Error saving new code:', insertError);
-            throw new Error('Ошибка при создании нового кода');
+            console.error('[resend-code] Error saving new code:', insertError);
+            console.error('[resend-code] Insert error details:', JSON.stringify(insertError, null, 2));
+            return res.status(500).json({ 
+                error: 'Ошибка при создании нового кода',
+                message: insertError.message || 'Проверьте структуру таблицы email_verifications'
+            });
         }
 
         // Отправляем код
+        console.log('[resend-code] Sending email to:', cleanEmail);
         try {
             await sendVerificationCode(cleanEmail, code);
+            console.log('[resend-code] Email sent successfully');
         } catch (emailError) {
-            console.error('Error sending email:', emailError);
-            throw new Error('Ошибка при отправке кода на email');
+            console.error('[resend-code] Error sending email:', emailError);
+            console.error('[resend-code] Email error details:', JSON.stringify(emailError, null, 2));
+            // Удаляем сохранённый код, если не удалось отправить email
+            await supabase
+                .from('email_verifications')
+                .delete()
+                .eq('code_hash', codeHash);
+            
+            return res.status(500).json({ 
+                error: 'Ошибка при отправке кода на email',
+                message: emailError.message || 'Проверьте настройки Resend API'
+            });
         }
 
         res.json({
@@ -641,7 +746,8 @@ app.post('/api/resend-code', async (req, res) => {
         });
 
     } catch (error) {
-        console.error('Resend code error:', error);
+        console.error('[resend-code] Unexpected error:', error);
+        console.error('[resend-code] Error stack:', error.stack);
         res.status(500).json({ 
             error: 'Ошибка отправки кода',
             message: error.message || 'Неизвестная ошибка'
