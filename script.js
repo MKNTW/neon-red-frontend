@@ -71,42 +71,17 @@ async function safeFetch(url, options = {}) {
         // Если ответ не OK, пытаемся получить сообщение об ошибке
         if (!response.ok) {
             let errorMessage = `Ошибка ${response.status}`;
-            let errorDetails = null;
             try {
                 const errorData = await response.json();
                 errorMessage = errorData.error || errorData.message || errorMessage;
-                errorDetails = errorData.details || errorData;
-                
-                // Логируем полную информацию об ошибке для отладки
-                console.error(`[safeFetch] Error ${response.status} for ${url}:`, errorMessage);
-                if (errorDetails) {
-                    console.error('[safeFetch] Error details:', errorDetails);
-                    // Если details - это объект, логируем его свойства отдельно
-                    if (typeof errorDetails === 'object' && errorDetails !== null) {
-                        console.error('[safeFetch] Error details expanded:', JSON.stringify(errorDetails, null, 2));
-                    }
-                }
-                console.error('[safeFetch] Full error response:', errorData);
             } catch (e) {
                 // Если не удалось распарсить JSON, используем статус
                 if (response.status === 401) errorMessage = 'Требуется авторизация';
                 else if (response.status === 403) errorMessage = 'Доступ запрещен';
                 else if (response.status === 404) errorMessage = `Ресурс не найден: ${url}`;
                 else if (response.status === 500) errorMessage = 'Ошибка сервера';
-                console.error(`[safeFetch] Error ${response.status} for ${url}:`, errorMessage, e);
             }
-            // Добавляем детали к сообщению об ошибке, если они есть
-            if (errorDetails) {
-                if (typeof errorDetails === 'string') {
-                    errorMessage += `: ${errorDetails}`;
-                } else if (typeof errorDetails === 'object' && errorDetails !== null) {
-                    // Пытаемся извлечь полезную информацию из объекта
-                    const detailStr = errorDetails.message || errorDetails.error || JSON.stringify(errorDetails);
-                    if (detailStr && detailStr.length < 200) {
-                        errorMessage += `: ${detailStr}`;
-                    }
-                }
-            }
+            console.error(`[safeFetch] Error ${response.status} for ${url}:`, errorMessage);
             throw new Error(errorMessage);
         }
         
@@ -116,23 +91,9 @@ async function safeFetch(url, options = {}) {
         if (error.name === 'AbortError') {
             throw new Error('Превышено время ожидания запроса');
         }
-        if (error instanceof TypeError) {
-            const errorMsg = error.message || '';
+        if (error instanceof TypeError && error.message.includes('fetch')) {
             console.error(`[safeFetch] Network error for ${url}:`, error);
-            console.error(`[safeFetch] Error type: ${error.name}, Message: ${errorMsg}`);
-            
-            // Более детальные сообщения об ошибках сети
-            if (errorMsg.includes('NetworkError') || errorMsg.includes('Failed to fetch')) {
-                // Это может быть CORS, сервер недоступен, или проблема с SSL
-                let networkErrorMsg = 'Ошибка сети. ';
-                if (url.includes('https://')) {
-                    networkErrorMsg += 'Возможные причины: сервер недоступен, проблема с CORS, или ошибка SSL. ';
-                }
-                networkErrorMsg += `Проверьте подключение к интернету и доступность сервера: ${new URL(url).origin}`;
-                throw new Error(networkErrorMsg);
-            } else if (errorMsg.includes('fetch')) {
-                throw new Error('Ошибка сети. Проверьте подключение к интернету');
-            }
+            throw new Error('Ошибка сети. Проверьте подключение к интернету');
         }
         throw error;
     } finally {
@@ -155,10 +116,10 @@ class NeonShop {
         if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
             this.API_BASE_URL = 'http://localhost:3001/api';
         } else if (window.location.hostname === 'shop.mkntw.xyz' || window.location.hostname.includes('mkntw.xyz')) {
-            // Для продакшена используем api-shop.mkntw.xyz
+            // Для продакшена используем apiforshop.mkntw.xyz
             this.API_BASE_URL = 'https://apiforshop.mkntw.xyz/api';
         } else {
-            // Fallback на api-shop.mkntw.xyz
+            // Fallback на apiforshop.mkntw.xyz
             this.API_BASE_URL = 'https://apiforshop.mkntw.xyz/api';
         }
         
@@ -685,7 +646,7 @@ class NeonShop {
     // const formData = new FormData();
     // formData.append('image', fileInput.files[0]);
     // 
-    // const res = await fetch('https://shop.mkntw.xyz/api/upload-image', {
+    // const res = await fetch('https://apiforshop.mkntw.xyz/api/upload-image', {
     //     method: 'POST',
     //     body: formData
     // });
@@ -738,31 +699,13 @@ class NeonShop {
     }
 
     async saveNewProduct() {
-        const title = document.getElementById('new-product-title').value?.trim();
-        const description = document.getElementById('new-product-description').value?.trim() || null;
-        const priceValue = document.getElementById('new-product-price').value;
-        const quantityValue = document.getElementById('new-product-quantity').value;
-        const imageUrl = document.getElementById('new-product-image').value?.trim();
+        const title = document.getElementById('new-product-title').value;
+        const description = document.getElementById('new-product-description').value;
+        const price = parseFloat(document.getElementById('new-product-price').value);
+        const quantity = parseInt(document.getElementById('new-product-quantity').value);
+        const imageUrl = document.getElementById('new-product-image').value;
         const fileInput = document.getElementById('new-product-image-upload');
         const file = fileInput.files[0];
-
-        // Валидация
-        if (!title || title.length < 1) {
-            this.showToast('Название товара обязательно', 'error');
-            return;
-        }
-
-        const price = parseFloat(priceValue);
-        if (isNaN(price) || price < 0) {
-            this.showToast('Цена должна быть положительным числом', 'error');
-            return;
-        }
-
-        const quantity = parseInt(quantityValue);
-        if (isNaN(quantity) || quantity < 0 || !Number.isInteger(quantity)) {
-            this.showToast('Количество должно быть неотрицательным целым числом', 'error');
-            return;
-        }
 
         try {
             let finalImageUrl = imageUrl || 'https://via.placeholder.com/300';
@@ -778,40 +721,29 @@ class NeonShop {
             }
             
             // Создаем товар с полученным URL изображения
-            const productData = {
-                title,
-                description: description || null,
-                price,
-                quantity,
-                image_url: finalImageUrl
-            };
-            
-            console.log('Creating product with data:', productData);
-            console.log('Token present:', !!this.token);
-            
             const productResponse = await safeFetch(`${this.API_BASE_URL}/admin/products`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${this.token}`
                 },
-                body: JSON.stringify(productData)
+                body: JSON.stringify({
+                    title,
+                    description,
+                    price,
+                    quantity,
+                    image_url: finalImageUrl
+                })
             });
             
-            const productResult = await productResponse.json();
-            console.log('Product created successfully:', productResult);
+            await productResponse.json();
             this.showToast('Товар создан', 'success');
 
             this.closeAddProductModal();
             await this.loadAdminProducts();
             await this.loadProducts();
         } catch (error) {
-            console.error('Error creating product:', error);
-            console.error('Error details:', {
-                message: error.message,
-                stack: error.stack
-            });
-            this.showToast(error.message || 'Ошибка создания товара', 'error');
+            this.showToast(error.message, 'error');
         }
     }
 
@@ -2498,24 +2430,13 @@ class NeonShop {
 
     async register(username, email, password, fullName) {
         try {
-            const registerData = { username, email, password, fullName };
-            console.log('Registering user with data:', {
-                username,
-                email,
-                password: password ? `[${password.length} chars]` : null,
-                fullName
-            });
-            console.log('API Base URL:', this.API_BASE_URL);
-            console.log('Full register URL:', `${this.API_BASE_URL}/register`);
-            
             const response = await safeFetch(`${this.API_BASE_URL}/register`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(registerData)
+                body: JSON.stringify({ username, email, password, fullName })
             });
 
             const data = await response.json();
-            console.log('Registration successful:', data);
 
             this.user = data.user;
             this.token = data.token;
@@ -2537,12 +2458,7 @@ class NeonShop {
             return true;
 
         } catch (error) {
-            console.error('Registration error:', error);
-            console.error('Error details:', {
-                message: error.message,
-                stack: error.stack
-            });
-            this.showToast(error.message || 'Ошибка регистрации', 'error');
+            this.showToast(error.message, 'error');
             return false;
         }
     }

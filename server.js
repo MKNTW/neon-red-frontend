@@ -65,45 +65,6 @@ const authenticateAdmin = (req, res, next) => {
     next();
 };
 
-// === БАЗОВЫЙ ЭНДПОИНТ API ===
-
-// Проверка работы API
-app.get('/api', (req, res) => {
-    res.json({
-        status: 'ok',
-        message: 'NEON RED API работает',
-        version: '1.0.0',
-        endpoints: {
-            auth: {
-                register: 'POST /api/register',
-                login: 'POST /api/login',
-                validateToken: 'GET /api/validate-token',
-                checkUsername: 'GET /api/check-username/:username'
-            },
-            products: {
-                getAll: 'GET /api/products',
-                getAdmin: 'GET /api/admin/products',
-                create: 'POST /api/admin/products',
-                update: 'PUT /api/admin/products/:id',
-                delete: 'DELETE /api/admin/products/:id'
-            },
-            profile: {
-                update: 'PUT /api/profile',
-                uploadAvatar: 'POST /api/profile/avatar',
-                delete: 'DELETE /api/profile'
-            },
-            orders: {
-                create: 'POST /api/orders',
-                getUserOrders: 'GET /api/orders',
-                getAll: 'GET /api/admin/orders'
-            },
-            categories: {
-                getAll: 'GET /api/categories'
-            }
-        }
-    });
-});
-
 // === АУТЕНТИФИКАЦИЯ ===
 
 // Проверка доступности имени пользователя
@@ -190,25 +151,11 @@ app.post('/api/register', async (req, res) => {
         const passwordHash = await bcrypt.hash(password, saltRounds);
 
         // Первый пользователь - админ (warning: change for prod)
-        // Проверяем количество пользователей более надежным способом
-        let isAdmin = false;
-        try {
-            const { count, error: countError } = await supabase
-                .from('users')
-                .select('*', { count: 'exact', head: true });
-                
-            if (countError) {
-                console.error('Error counting users:', countError);
-                // Если не удалось посчитать, просто продолжаем (не критично)
-                console.warn('Could not determine if user should be admin, defaulting to false');
-            } else {
-                isAdmin = count === 0 || count === null;
-            }
-        } catch (countErr) {
-            console.error('Exception while counting users:', countErr);
-            // Продолжаем без прав админа, если не удалось определить
-            isAdmin = false;
-        }
+        const { count } = await supabase
+            .from('users')
+            .select('*', { count: 'exact' });
+            
+        const isAdmin = count === 0;
 
         const { data: user, error } = await supabase
             .from('users')
@@ -249,17 +196,7 @@ app.post('/api/register', async (req, res) => {
 
     } catch (error) {
         console.error('Registration error:', error);
-        const errorDetails = {
-            message: error.message,
-            code: error.code,
-            details: error.details,
-            hint: error.hint
-        };
-        console.error('Registration error details:', errorDetails);
-        res.status(500).json({ 
-            error: 'Ошибка регистрации',
-            details: errorDetails
-        });
+        res.status(500).json({ error: 'Ошибка регистрации' });
     }
 });
 
@@ -319,17 +256,7 @@ app.post('/api/login', async (req, res) => {
 
     } catch (error) {
         console.error('Login error:', error);
-        const errorDetails = {
-            message: error.message,
-            code: error.code,
-            details: error.details,
-            hint: error.hint
-        };
-        console.error('Login error details:', errorDetails);
-        res.status(500).json({ 
-            error: 'Ошибка входа',
-            details: errorDetails
-        });
+        res.status(500).json({ error: 'Ошибка входа' });
     }
 });
 
@@ -839,63 +766,45 @@ app.get('/api/admin/products', authenticateToken, authenticateAdmin, async (req,
 
 // Создать товар (админ)
 app.post('/api/admin/products', authenticateToken, authenticateAdmin, async (req, res) => {
-    let productData = null;
     try {
         const { title, description, price, quantity, category, image_url } = req.body;
-        
-        console.log('Create product request:', { title, price, quantity, category, hasImage: !!image_url });
         
         // Валидация
         if (!title || typeof title !== 'string' || title.trim().length < 1) {
             return res.status(400).json({ error: 'Название товара обязательно' });
         }
-        
-        // Преобразование и валидация price
-        const priceNum = typeof price === 'string' ? parseFloat(price) : price;
-        if (typeof priceNum !== 'number' || isNaN(priceNum) || priceNum < 0) {
+        if (typeof price !== 'number' || price < 0) {
             return res.status(400).json({ error: 'Цена должна быть положительным числом' });
         }
-        
-        // Преобразование и валидация quantity
-        const quantityNum = typeof quantity === 'string' ? parseInt(quantity) : quantity;
-        if (typeof quantityNum !== 'number' || isNaN(quantityNum) || quantityNum < 0 || !Number.isInteger(quantityNum)) {
+        if (typeof quantity !== 'number' || quantity < 0 || !Number.isInteger(quantity)) {
             return res.status(400).json({ error: 'Количество должно быть неотрицательным целым числом' });
         }
         
-        productData = {
+        const productData = {
             title: title.trim(),
-            description: description ? (typeof description === 'string' ? description.trim() : null) : null,
-            price: priceNum,
-            quantity: quantityNum,
-            category: category ? (typeof category === 'string' ? category.trim() : null) : null
+            description: description ? description.trim() : null,
+            price: parseFloat(price),
+            quantity: parseInt(quantity),
+            category: category ? category.trim() : null
         };
         
         // Если передан image_url, извлекаем из него путь или сохраняем как image_path
-        if (image_url && typeof image_url === 'string' && image_url.trim() !== '') {
-            try {
-                const imageUrl = image_url.trim();
-                // Если это полный URL, извлекаем путь
-                if (imageUrl.includes('storage/v1/object/public/product-images/')) {
-                    const match = imageUrl.match(/storage\/v1\/object\/public\/product-images\/(.+)$/);
-                    if (match) {
-                        productData.image_path = match[1];
-                    } else {
-                        productData.image_path = imageUrl;
-                    }
-                } else if (imageUrl.startsWith('http')) {
-                    // Если это другой URL, сохраняем как путь (будет обработан при получении)
-                    productData.image_path = imageUrl;
-                } else {
-                    // Если это просто путь
-                    productData.image_path = imageUrl;
+        if (image_url && image_url.trim() !== '') {
+            const imageUrl = image_url.trim();
+            // Если это полный URL, извлекаем путь
+            if (imageUrl.includes('storage/v1/object/public/product-images/')) {
+                const match = imageUrl.match(/storage\/v1\/object\/public\/product-images\/(.+)$/);
+                if (match) {
+                    productData.image_path = match[1];
                 }
-            } catch (imgError) {
-                console.error('Error processing image_url:', imgError);
-                // Продолжаем без изображения, если ошибка обработки
+            } else if (imageUrl.startsWith('http')) {
+                // Если это другой URL, сохраняем как путь (будет обработан при получении)
+                productData.image_path = imageUrl;
+            } else {
+                // Если это просто путь
+                productData.image_path = imageUrl;
             }
         }
-        
-        console.log('Inserting product data:', productData);
         
         const { data: product, error } = await supabase
             .from('products')
@@ -903,28 +812,13 @@ app.post('/api/admin/products', authenticateToken, authenticateAdmin, async (req
             .select('id, title, description, price, quantity, category, image_path, created_at')
             .single();
 
-        if (error) {
-            console.error('Supabase insert error:', error);
-            throw error;
-        }
+        if (error) throw error;
 
-        console.log('Product created successfully:', product);
         res.status(201).json(product);
 
     } catch (error) {
         console.error('Create product error:', error);
-        const errorDetails = {
-            message: error.message,
-            code: error.code,
-            details: error.details,
-            hint: error.hint,
-            productData: productData
-        };
-        console.error('Error details:', errorDetails);
-        res.status(500).json({ 
-            error: 'Ошибка создания товара',
-            details: errorDetails
-        });
+        res.status(500).json({ error: 'Ошибка создания товара' });
     }
 });
 
