@@ -129,8 +129,7 @@ class NeonShop {
         this.resendEmailChangeTimer = null; // Таймер для повторной отправки кода смены email
         this.pendingRegistrationToken = null; // Токен после подтверждения email
         this.pendingRegistrationUser = null; // Данные пользователя после подтверждения email
-        this.pendingEmailChange = null; // Новый email для смены
-        this.resendEmailChangeTimer = null; // Таймер для повторной отправки кода смены email
+        this.isConfirmingCode = false; // Флаг для предотвращения повторных запросов подтверждения кода
 
         // Автоматическое определение URL для API
         if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
@@ -2305,6 +2304,11 @@ class NeonShop {
             fullName: '',
             password: ''
         };
+        // Сбрасываем флаги при сбросе формы
+        this.isConfirmingCode = false;
+        this.pendingVerificationEmail = null;
+        this.pendingRegistrationToken = null;
+        this.pendingRegistrationUser = null;
     }
     
     async checkUsername(username) {
@@ -2814,11 +2818,24 @@ class NeonShop {
     }
 
     async confirmEmailCode() {
+        // Защита от повторных запросов
+        if (this.isConfirmingCode) {
+            return false;
+        }
+        
         const codeInput = document.getElementById('register-code');
         const codeError = document.getElementById('code-error');
         
-        if (!codeInput || !this.pendingVerificationEmail) {
-            this.showToast('Ошибка: email не найден', 'error');
+        if (!codeInput) {
+            this.showToast('Ошибка: поле ввода кода не найдено', 'error');
+            return false;
+        }
+        
+        if (!this.pendingVerificationEmail) {
+            this.showToast('Ошибка: email не найден. Начните регистрацию заново', 'error');
+            // Возвращаемся на шаг 2
+            this.currentRegisterStep = 2;
+            this.updateRegisterStepDisplay();
             return false;
         }
 
@@ -2830,6 +2847,7 @@ class NeonShop {
                 codeError.textContent = 'Введите 6-значный код';
                 codeError.style.display = 'block';
             }
+            this.showToast('Введите 6-значный код', 'error');
             return false;
         }
 
@@ -2838,7 +2856,11 @@ class NeonShop {
             codeError.style.display = 'none';
         }
 
+        // Устанавливаем флаг, чтобы предотвратить повторные запросы
+        this.isConfirmingCode = true;
+        
         try {
+            showLoadingIndicator();
             const response = await safeFetch(`${this.API_BASE_URL}/confirm-email`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -2849,6 +2871,18 @@ class NeonShop {
             });
 
             const data = await response.json();
+            hideLoadingIndicator();
+
+            // Проверяем статус ответа
+            if (!response.ok) {
+                const errorMsg = data?.error || data?.message || 'Ошибка подтверждения';
+                this.showToast(errorMsg, 'error');
+                if (codeError) {
+                    codeError.textContent = errorMsg;
+                    codeError.style.display = 'block';
+                }
+                return false;
+            }
 
             if (data.success) {
                 // Сохраняем токен и данные пользователя для завершения регистрации
@@ -2861,39 +2895,78 @@ class NeonShop {
                     this.updateRegisterStepDisplay();
                     
                     this.showToast('Email подтверждён! Завершите регистрацию', 'success');
+                    
+                    // Очищаем поле кода
+                    if (codeInput) {
+                        codeInput.value = '';
+                    }
                 } else {
                     this.showToast('Email успешно подтверждён! Теперь можно войти', 'success');
                     showLoginForm();
                 }
                 
-                this.pendingVerificationEmail = null;
+                // Очищаем таймер
                 if (this.resendCodeTimer) {
                     clearInterval(this.resendCodeTimer);
                     this.resendCodeTimer = null;
                 }
+                
+                // Очищаем pendingVerificationEmail только после успешного подтверждения
+                this.pendingVerificationEmail = null;
+                
+                // Сбрасываем флаг
+                this.isConfirmingCode = false;
+                
                 return true;
             } else {
-                this.showToast(data.error || data.message || 'Ошибка подтверждения', 'error');
+                const errorMsg = data.error || data.message || 'Ошибка подтверждения';
+                this.showToast(errorMsg, 'error');
                 if (codeError) {
-                    codeError.textContent = data.error || data.message || 'Неверный код';
+                    codeError.textContent = errorMsg;
                     codeError.style.display = 'block';
                 }
+                
+                // Сбрасываем флаг при ошибке
+                this.isConfirmingCode = false;
+                
                 return false;
             }
 
         } catch (error) {
-            this.showToast(error.message, 'error');
+            hideLoadingIndicator();
+            
+            // Улучшенная обработка ошибок
+            let errorMessage = error.message || 'Ошибка подтверждения';
+            
+            // Если ошибка сети
+            if (errorMessage.includes('Network') || errorMessage.includes('fetch') || errorMessage.includes('сети')) {
+                errorMessage = 'Ошибка сети. Проверьте подключение и попробуйте снова';
+            }
+            
+            // Если ошибка от сервера, используем данные из error.data
+            if (error.data) {
+                errorMessage = error.data.error || error.data.message || errorMessage;
+            }
+            
+            this.showToast(errorMessage, 'error');
             if (codeError) {
-                codeError.textContent = error.message;
+                codeError.textContent = errorMessage;
                 codeError.style.display = 'block';
             }
+            
+            // Сбрасываем флаг при ошибке
+            this.isConfirmingCode = false;
+            
             return false;
         }
     }
 
     async resendVerificationCode() {
         if (!this.pendingVerificationEmail) {
-            this.showToast('Ошибка: email не найден', 'error');
+            this.showToast('Ошибка: email не найден. Начните регистрацию заново', 'error');
+            // Возвращаемся на шаг 2
+            this.currentRegisterStep = 2;
+            this.updateRegisterStepDisplay();
             return false;
         }
 
@@ -2903,6 +2976,7 @@ class NeonShop {
         }
 
         try {
+            showLoadingIndicator();
             const response = await safeFetch(`${this.API_BASE_URL}/resend-code`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -2912,18 +2986,42 @@ class NeonShop {
             });
 
             const data = await response.json();
+            hideLoadingIndicator();
+            
+            // Проверяем статус ответа
+            if (!response.ok) {
+                const errorMsg = data?.error || data?.message || 'Ошибка отправки кода';
+                this.showToast(errorMsg, 'error');
+                return false;
+            }
 
             if (data.success) {
                 this.showToast('Новый код отправлен на почту', 'success');
                 this.startResendCodeTimer();
                 return true;
             } else {
-                this.showToast(data.error || data.message || 'Ошибка отправки кода', 'error');
+                const errorMsg = data.error || data.message || 'Ошибка отправки кода';
+                this.showToast(errorMsg, 'error');
                 return false;
             }
 
         } catch (error) {
-            this.showToast(error.message, 'error');
+            hideLoadingIndicator();
+            
+            // Улучшенная обработка ошибок
+            let errorMessage = error.message || 'Ошибка отправки кода';
+            
+            // Если ошибка сети
+            if (errorMessage.includes('Network') || errorMessage.includes('fetch') || errorMessage.includes('сети')) {
+                errorMessage = 'Ошибка сети. Проверьте подключение и попробуйте снова';
+            }
+            
+            // Если ошибка от сервера, используем данные из error.data
+            if (error.data) {
+                errorMessage = error.data.error || error.data.message || errorMessage;
+            }
+            
+            this.showToast(errorMessage, 'error');
             return false;
         }
     }
@@ -2963,11 +3061,21 @@ class NeonShop {
             });
 
             const data = await response.json();
+            
+            // Проверяем статус ответа
+            if (!response.ok) {
+                hideLoadingIndicator();
+                const errorMsg = data?.error || data?.message || 'Ошибка отправки кода';
+                this.showToast(errorMsg, 'error');
+                return false;
+            }
+            
             hideLoadingIndicator();
 
             if (data.success) {
                 this.pendingVerificationEmail = email;
                 this.showToast('✅ Код подтверждения отправлен на почту', 'success');
+                return true;
             } else {
                 // Не показываем ошибку, если email уже зарегистрирован - это нормально
                 if (!data.error || (!data.error.includes('уже зарегистрирован') && !data.error.includes('Подождите'))) {
@@ -2975,6 +3083,7 @@ class NeonShop {
                 } else if (data.error.includes('Подождите')) {
                     this.showToast(data.message || data.error, 'warning');
                 }
+                return false;
             }
         } catch (error) {
             hideLoadingIndicator();

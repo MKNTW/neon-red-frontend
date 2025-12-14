@@ -672,11 +672,18 @@ app.post('/api/confirm-email', async (req, res) => {
             throw new Error('Ошибка при подтверждении email');
         }
 
-        // Удаляем использованный код
+        // Удаляем использованный код (и по user_id, и по email для временных кодов)
         await supabase
             .from('email_verifications')
             .delete()
             .eq('user_id', user.id);
+        
+        // Также удаляем временные коды по email
+        await supabase
+            .from('email_verifications')
+            .delete()
+            .eq('email', cleanEmail)
+            .is('user_id', null);
 
         // Создаём JWT токен для автоматического входа
         const token = jwt.sign(
