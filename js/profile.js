@@ -14,6 +14,45 @@ export class ProfileModule {
             modal.style.display = 'block';
             document.body.style.overflow = 'hidden';
             this.loadProfileData();
+            this.loadOrders();
+            this.setupProfileEventListeners();
+        }
+    }
+
+    setupProfileEventListeners() {
+        // Обработчики для кнопок редактирования
+        const editButtons = document.querySelectorAll('.profile-edit-btn[data-field]');
+        editButtons.forEach(btn => {
+            // Удаляем старые обработчики
+            btn.replaceWith(btn.cloneNode(true));
+            const newBtn = document.querySelector(`.profile-edit-btn[data-field="${btn.dataset.field}"]`);
+            if (newBtn) {
+                newBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const field = newBtn.dataset.field;
+                    this.showEditForm(field);
+                });
+            }
+        });
+    }
+
+    showEditForm(field) {
+        // Скрываем все формы редактирования
+        document.querySelectorAll('.profile-edit-form').forEach(form => {
+            form.style.display = 'none';
+        });
+
+        // Показываем нужную форму
+        const form = document.getElementById(`edit-${field}-form`);
+        if (form) {
+            form.style.display = 'flex';
+            
+            // Фокус на поле ввода
+            const input = form.querySelector('input');
+            if (input) {
+                setTimeout(() => input.focus(), 100);
+            }
         }
     }
 
@@ -28,13 +67,47 @@ export class ProfileModule {
     loadProfileData() {
         if (!this.shop.user) return;
 
+        const user = this.shop.user;
+
+        // Обновляем основные поля
         const usernameEl = document.getElementById('profile-username');
         const emailEl = document.getElementById('profile-email');
         const fullNameEl = document.getElementById('profile-fullname');
 
-        if (usernameEl) usernameEl.textContent = this.shop.user.username || 'Не указано';
-        if (emailEl) emailEl.textContent = this.shop.user.email || 'Не указано';
-        if (fullNameEl) fullNameEl.textContent = this.shop.user.fullName || 'Не указано';
+        if (usernameEl) usernameEl.textContent = user.username || 'Не указано';
+        if (emailEl) emailEl.textContent = user.email || 'Не указано';
+        if (fullNameEl) fullNameEl.textContent = user.fullName || 'Не указано';
+
+        // Обновляем заголовки профиля
+        const usernameHeader = document.getElementById('profile-username-header');
+        const emailHeader = document.getElementById('profile-email-header');
+        
+        if (usernameHeader) usernameHeader.textContent = user.username || 'Пользователь';
+        if (emailHeader) emailHeader.textContent = user.email || 'email@example.com';
+
+        // Обновляем аватар
+        const avatarImg = document.getElementById('profile-avatar-img');
+        const avatarText = document.getElementById('profile-avatar-text');
+        
+        if (user.avatar_url) {
+            if (avatarImg) {
+                avatarImg.src = user.avatar_url;
+                avatarImg.style.display = 'block';
+            }
+            if (avatarText) avatarText.style.display = 'none';
+        } else {
+            if (avatarImg) avatarImg.style.display = 'none';
+            if (avatarText) {
+                avatarText.style.display = 'flex';
+                avatarText.textContent = (user.username || 'U').charAt(0).toUpperCase();
+            }
+        }
+
+        // Показываем/скрываем бейдж администратора
+        const adminBadge = document.getElementById('profile-isadmin-badge');
+        if (adminBadge) {
+            adminBadge.style.display = user.isAdmin ? 'block' : 'none';
+        }
     }
 
     async loadOrders() {
@@ -169,7 +242,7 @@ export class ProfileModule {
                 this.shop.user = data.user;
                 localStorage.setItem('user', JSON.stringify(this.shop.user));
                 this.shop.updateAuthUI();
-                this.openProfileModal(); // Перезагружаем профиль
+                this.loadProfileData(); // Обновляем данные профиля
                 showToast('Профиль обновлен', 'success');
             }
         } catch (error) {

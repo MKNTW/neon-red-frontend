@@ -1,5 +1,5 @@
 // shop.js - Основной класс, объединяющий все модули
-import { getApiBaseUrl, checkIsMobile, setupSwipeGestures, preventDoubleTapZoom, closeAllModals } from './utils.js';
+import { getApiBaseUrl, checkIsMobile, setupSwipeGestures, preventDoubleTapZoom, closeAllModals, showToast } from './utils.js';
 import { ProductsModule } from './products.js';
 import { CartModule } from './cart.js';
 import { AuthModule } from './auth.js';
@@ -256,8 +256,59 @@ export class NeonShop {
             console.error(`Input field not found: edit-${field}-input`);
             return;
         }
-        const value = input.value.trim();
-        return this.profileModule.updateProfile(field, value);
+        
+        let value = input.value.trim();
+        
+        // Специальная обработка для пароля
+        if (field === 'password') {
+            const confirmInput = document.getElementById('edit-password-confirm');
+            if (!confirmInput) {
+                showToast('Поле подтверждения пароля не найдено', 'error');
+                return;
+            }
+            
+            const confirmValue = confirmInput.value.trim();
+            
+            if (!value) {
+                showToast('Введите новый пароль', 'error');
+                return;
+            }
+            
+            if (value.length < 6) {
+                showToast('Пароль должен содержать минимум 6 символов', 'error');
+                return;
+            }
+            
+            if (value !== confirmValue) {
+                showToast('Пароли не совпадают', 'error');
+                return;
+            }
+        }
+        
+        // Проверка на пустое значение для других полей
+        if (!value && field !== 'fullname') {
+            showToast('Поле не может быть пустым', 'error');
+            return;
+        }
+        
+        try {
+            await this.profileModule.updateProfile(field, value);
+            
+            // Закрываем форму после успешного сохранения
+            const form = document.getElementById(`edit-${field}-form`);
+            if (form) {
+                form.style.display = 'none';
+            }
+            
+            // Очищаем поля ввода
+            if (input) input.value = '';
+            if (field === 'password') {
+                const confirmInput = document.getElementById('edit-password-confirm');
+                if (confirmInput) confirmInput.value = '';
+            }
+        } catch (error) {
+            console.error('Error saving profile field:', error);
+        }
     }
 
     async changeEmail() {

@@ -1,4 +1,8 @@
 /* NEON RED — киберпанк магазин 2025 (Адаптивный) */
+
+/* Подключение шрифта - должно быть в начале файла */
+@import url('https://fonts.googleapis.com/css2?family=Exo+2:wght@400;500;600;700;800;900&display=swap');
+
 * { 
     margin: 0; 
     padding: 0; 
@@ -3247,9 +3251,6 @@ input, textarea, [contenteditable] {
         gap: 8px;
     }
 }
-
-/* Подключение шрифта */
-@import url('https://fonts.googleapis.com/css2?family=Exo+2:wght@400;500;600;700;800;900&display=swap');
 
 /* === ПАГИНАЦИЯ === */
 .products-pagination {
