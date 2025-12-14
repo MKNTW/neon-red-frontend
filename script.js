@@ -2354,10 +2354,15 @@ class NeonShop {
             this.registerData.email = email;
             this.hideFieldError('email-error');
             
-            // Автоматически отправляем код проверки email
-            this.sendEmailVerificationCode(email);
-        } else if (currentStep === 3) {
-            // Шаг 3: Пароль
+            // Регистрируем пользователя БЕЗ пароля и отправляем код
+            await this.registerUserWithoutPassword();
+            return; // Не переходим дальше, код покажет следующий шаг
+        } else if (currentStep === 4) {
+            // Шаг 4: Полное имя (необязательно)
+            const fullName = document.getElementById('register-fullname')?.value.trim();
+            this.registerData.fullName = fullName;
+        } else if (currentStep === 5) {
+            // Шаг 5: Пароль
             const password = document.getElementById('register-password')?.value;
             const password2 = document.getElementById('register-password2')?.value;
             
@@ -2378,16 +2383,13 @@ class NeonShop {
             
             this.registerData.password = password;
             this.hideFieldError('password-error');
-            // На шаге 3 отправляем форму регистрации
-            const form = document.getElementById('register-form');
-            if (form) {
-                form.requestSubmit();
-            }
-            return; // Не переходим дальше, форма отправится
+            // Завершаем регистрацию с паролем
+            await this.completeRegistrationWithPassword();
+            return;
         }
         
-        // Переход между шагами 1 и 2
-        if (currentStep < 3) {
+        // Переход между шагами
+        if (currentStep < 5) {
             this.currentRegisterStep = currentStep + 1;
             this.updateRegisterStepDisplay();
         }
@@ -2402,7 +2404,75 @@ class NeonShop {
     
     skipFullName() {
         this.registerData.fullName = '';
-        this.completeRegistration();
+        // Переходим на шаг 5 (пароль)
+        this.currentRegisterStep = 5;
+        this.updateRegisterStepDisplay();
+    }
+
+    async completeRegistrationWithPassword() {
+        const password = this.registerData.password;
+        const fullName = document.getElementById('register-fullname')?.value.trim() || '';
+        
+        if (!password) {
+            this.showToast('Введите пароль', 'error');
+            return false;
+        }
+
+        if (!this.pendingRegistrationToken || !this.pendingRegistrationUser) {
+            this.showToast('Ошибка: данные регистрации не найдены', 'error');
+            return false;
+        }
+
+        try {
+            // Обновляем пароль и полное имя
+            showLoadingIndicator();
+            const response = await safeFetch(`${this.API_BASE_URL}/profile`, {
+                method: 'PUT',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${this.pendingRegistrationToken}`
+                },
+                body: JSON.stringify({ 
+                    password: password,
+                    fullName: fullName || null
+                })
+            });
+
+            const data = await response.json();
+            hideLoadingIndicator();
+
+            if (data.user) {
+                // Автоматически входим в аккаунт
+                this.user = data.user;
+                this.token = this.pendingRegistrationToken;
+                localStorage.setItem('user', JSON.stringify(this.user));
+                localStorage.setItem('token', this.token);
+                this.updateAuthUI();
+                this.showToast('Регистрация завершена! Вы автоматически вошли в аккаунт', 'success');
+                this.closeAuthModal();
+                await this.loadProducts();
+                
+                // Сброс формы регистрации
+                this.setupRegisterSteps();
+                this.updateRegisterStepDisplay();
+                this.pendingRegistrationToken = null;
+                this.pendingRegistrationUser = null;
+                this.registerData = {
+                    username: '',
+                    email: '',
+                    fullName: '',
+                    password: ''
+                };
+                return true;
+            } else {
+                this.showToast('Ошибка завершения регистрации', 'error');
+                return false;
+            }
+        } catch (error) {
+            hideLoadingIndicator();
+            this.showToast(error.message, 'error');
+            return false;
+        }
     }
 
     async completeRegistration() {
@@ -2618,8 +2688,8 @@ class NeonShop {
                     this.pendingRegistrationToken = data.token;
                     this.pendingRegistrationUser = data.user;
                     
-                    // Переходим на шаг 5 (полное имя)
-                    this.currentRegisterStep = 5;
+                    // Переходим на шаг 4 (полное имя)
+                    this.currentRegisterStep = 4;
                     this.updateRegisterStepDisplay();
                     
                     this.showToast('Email подтверждён! Завершите регистрацию', 'success');

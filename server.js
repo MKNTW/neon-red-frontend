@@ -169,8 +169,8 @@ app.post('/api/register', async (req, res) => {
         const { username, email, password, fullName } = req.body;
 
         // Базовая валидация
-        if (!username || !email || !password) {
-            return res.status(400).json({ error: 'Обязательные поля: username, email, password' });
+        if (!username || !email) {
+            return res.status(400).json({ error: 'Обязательные поля: username, email' });
         }
         
         // Валидация username
@@ -184,9 +184,18 @@ app.post('/api/register', async (req, res) => {
             return res.status(400).json({ error: 'Неверный формат email' });
         }
         
-        // Валидация пароля
-        if (typeof password !== 'string' || password.length < 6 || password.length > 100) {
-            return res.status(400).json({ error: 'Пароль должен быть от 6 до 100 символов' });
+        // Пароль может быть временным (будет установлен позже)
+        let passwordHash = null;
+        if (password && password !== 'temp_password_will_be_changed') {
+            if (typeof password !== 'string' || password.length < 6 || password.length > 100) {
+                return res.status(400).json({ error: 'Пароль должен быть от 6 до 100 символов' });
+            }
+            const saltRounds = 10;
+            passwordHash = await bcrypt.hash(password, saltRounds);
+        } else {
+            // Создаём временный пароль, который нужно будет изменить
+            const saltRounds = 10;
+            passwordHash = await bcrypt.hash('temp_' + Date.now(), saltRounds);
         }
         
         // Очистка данных
@@ -211,9 +220,7 @@ app.post('/api/register', async (req, res) => {
             });
         }
 
-        // Хэширование пароля
-        const saltRounds = 10;
-        const passwordHash = await bcrypt.hash(password, saltRounds);
+        // Пароль уже обработан выше
 
         // Первый пользователь - админ (warning: change for prod)
         const { count, error: countError } = await supabase
