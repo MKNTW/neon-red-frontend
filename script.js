@@ -2592,6 +2592,52 @@ class NeonShop {
         }
     }
 
+    async registerUserWithoutPassword() {
+        try {
+            const username = this.registerData.username;
+            const email = this.registerData.email;
+            
+            if (!username || !email) {
+                this.showToast('Заполните все поля', 'error');
+                return false;
+            }
+
+            const response = await safeFetch(`${this.API_BASE_URL}/register`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, email, password: 'temp_password_will_be_changed', fullName: null })
+            });
+
+            const data = await response.json();
+
+            // Если требуется подтверждение email
+            if (data.needsCodeConfirmation) {
+                this.pendingVerificationEmail = data.email;
+                this.pendingRegistrationToken = data.token;
+                this.pendingRegistrationUser = data.user;
+                // Показываем шаг 3 (ввод кода)
+                this.currentRegisterStep = 3;
+                this.updateRegisterStepDisplay();
+                // Устанавливаем email в поле
+                const emailEl = document.getElementById('verification-email');
+                if (emailEl) {
+                    emailEl.textContent = data.email;
+                }
+                // Запускаем таймер для повторной отправки
+                this.startResendCodeTimer();
+                this.showToast('Код подтверждения отправлен на почту', 'success');
+                return true;
+            }
+
+            this.showToast('Ошибка регистрации', 'error');
+            return false;
+
+        } catch (error) {
+            this.showToast(error.message, 'error');
+            return false;
+        }
+    }
+
     async register(username, email, password, fullName) {
         try {
             const response = await safeFetch(`${this.API_BASE_URL}/register`, {
