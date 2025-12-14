@@ -32,15 +32,9 @@ app.use(cors({
 app.use(express.json());
 
 // Supabase клиент
-// Проверка наличия обязательных переменных окружения
-if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) {
-    console.error('ОШИБКА: SUPABASE_URL и SUPABASE_SERVICE_KEY должны быть установлены в переменных окружения');
-    // В production это вызовет ошибку, что правильно - лучше упасть сразу, чем работать с неверными данными
-}
-
 const supabase = createClient(
-    process.env.SUPABASE_URL || '',
-    process.env.SUPABASE_SERVICE_KEY || ''
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_KEY
 );
 
 // JWT секрет
