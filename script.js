@@ -1268,6 +1268,366 @@ class NeonShop {
         }
     }
     
+    async changeEmail() {
+        const emailInput = document.getElementById('edit-email-input');
+        const emailForm = document.getElementById('edit-email-form');
+        const codeForm = document.getElementById('edit-email-code-form');
+        const emailError = document.getElementById('email-code-error');
+        
+        if (!emailInput) {
+            this.showToast('Ошибка: поле ввода email не найдено', 'error');
+            return false;
+        }
+        
+        const newEmail = emailInput.value.trim();
+        
+        // Валидация email
+        if (!newEmail) {
+            this.showToast('Введите новый email', 'error');
+            return false;
+        }
+        
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(newEmail)) {
+            this.showToast('Неверный формат email', 'error');
+            return false;
+        }
+        
+        // Проверяем, не совпадает ли с текущим email
+        if (this.user && this.user.email && newEmail.toLowerCase() === this.user.email.toLowerCase()) {
+            this.showToast('Это ваш текущий email', 'info');
+            return false;
+        }
+        
+        try {
+            showLoadingIndicator();
+            const response = await safeFetch(`${this.API_BASE_URL}/profile/change-email`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${this.token}`
+                },
+                body: JSON.stringify({ email: newEmail })
+            });
+            
+            const data = await response.json();
+            hideLoadingIndicator();
+            
+            // Проверяем статус ответа
+            if (!response.ok) {
+                const errorMsg = data?.error || data?.message || 'Ошибка отправки кода';
+                this.showToast(errorMsg, 'error');
+                return false;
+            }
+            
+            if (data.success) {
+                // Сохраняем новый email для подтверждения
+                this.pendingEmailChange = newEmail.toLowerCase();
+                
+                // Скрываем форму ввода email, показываем форму ввода кода
+                if (emailForm) emailForm.style.display = 'none';
+                if (codeForm) {
+                    codeForm.style.display = 'block';
+                    // Устанавливаем email в поле отображения
+                    const emailDisplay = document.getElementById('new-email-display');
+                    if (emailDisplay) {
+                        emailDisplay.textContent = newEmail;
+                    }
+                    // Очищаем поле кода
+                    const codeInput = document.getElementById('edit-email-code-input');
+                    if (codeInput) {
+                        codeInput.value = '';
+                    }
+                }
+                
+                // Запускаем таймер для повторной отправки
+                this.startResendEmailChangeTimer();
+                
+                this.showToast('Код подтверждения отправлен на новый email', 'success');
+                return true;
+            } else {
+                const errorMsg = data.error || data.message || 'Ошибка отправки кода';
+                this.showToast(errorMsg, 'error');
+                return false;
+            }
+        } catch (error) {
+            hideLoadingIndicator();
+            
+            // Улучшенная обработка ошибок
+            let errorMessage = error.message || 'Ошибка отправки кода';
+            
+            // Если ошибка сети
+            if (errorMessage.includes('Network') || errorMessage.includes('fetch') || errorMessage.includes('сети')) {
+                errorMessage = 'Ошибка сети. Проверьте подключение и попробуйте снова';
+            }
+            
+            // Если ошибка от сервера, используем данные из error.data
+            if (error.data) {
+                errorMessage = error.data.error || error.data.message || errorMessage;
+            }
+            
+            this.showToast(errorMessage, 'error');
+            return false;
+        }
+    }
+    
+    async confirmEmailChange() {
+        const codeInput = document.getElementById('edit-email-code-input');
+        const codeError = document.getElementById('email-code-error');
+        const emailForm = document.getElementById('edit-email-form');
+        const codeForm = document.getElementById('edit-email-code-form');
+        
+        if (!codeInput) {
+            this.showToast('Ошибка: поле ввода кода не найдено', 'error');
+            return false;
+        }
+        
+        if (!this.pendingEmailChange) {
+            this.showToast('Ошибка: email не найден. Начните смену email заново', 'error');
+            // Возвращаемся к форме ввода email
+            if (emailForm) emailForm.style.display = 'block';
+            if (codeForm) codeForm.style.display = 'none';
+            return false;
+        }
+        
+        const code = codeInput.value.trim();
+        
+        // Валидация кода
+        if (!code || code.length !== 6 || !/^\d{6}$/.test(code)) {
+            if (codeError) {
+                codeError.textContent = 'Введите 6-значный код';
+                codeError.style.display = 'block';
+            }
+            this.showToast('Введите 6-значный код', 'error');
+            return false;
+        }
+        
+        if (codeError) {
+            codeError.textContent = '';
+            codeError.style.display = 'none';
+        }
+        
+        try {
+            showLoadingIndicator();
+            const response = await safeFetch(`${this.API_BASE_URL}/profile/confirm-email-change`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${this.token}`
+                },
+                body: JSON.stringify({
+                    email: this.pendingEmailChange,
+                    code: code
+                })
+            });
+            
+            const data = await response.json();
+            hideLoadingIndicator();
+            
+            // Проверяем статус ответа
+            if (!response.ok) {
+                const errorMsg = data?.error || data?.message || 'Ошибка подтверждения';
+                this.showToast(errorMsg, 'error');
+                if (codeError) {
+                    codeError.textContent = errorMsg;
+                    codeError.style.display = 'block';
+                }
+                return false;
+            }
+            
+            if (data.success && data.user) {
+                // Обновляем данные пользователя
+                this.user = data.user;
+                localStorage.setItem('user', JSON.stringify(this.user));
+                this.updateAuthUI();
+                
+                // Обновляем отображение email в профиле
+                const profileEmail = document.getElementById('profile-email');
+                if (profileEmail) {
+                    profileEmail.textContent = data.user.email;
+                }
+                const profileEmailHeader = document.getElementById('profile-email-header');
+                if (profileEmailHeader) {
+                    profileEmailHeader.textContent = data.user.email;
+                }
+                
+                // Скрываем формы
+                if (emailForm) emailForm.style.display = 'none';
+                if (codeForm) codeForm.style.display = 'none';
+                
+                // Очищаем поля
+                const emailInput = document.getElementById('edit-email-input');
+                if (emailInput) emailInput.value = '';
+                if (codeInput) codeInput.value = '';
+                
+                // Очищаем таймер
+                if (this.resendEmailChangeTimer) {
+                    clearInterval(this.resendEmailChangeTimer);
+                    this.resendEmailChangeTimer = null;
+                }
+                
+                // Очищаем pendingEmailChange
+                this.pendingEmailChange = null;
+                
+                this.showToast('Email успешно изменён!', 'success');
+                return true;
+            } else {
+                const errorMsg = data.error || data.message || 'Ошибка подтверждения';
+                this.showToast(errorMsg, 'error');
+                if (codeError) {
+                    codeError.textContent = errorMsg;
+                    codeError.style.display = 'block';
+                }
+                return false;
+            }
+        } catch (error) {
+            hideLoadingIndicator();
+            
+            // Улучшенная обработка ошибок
+            let errorMessage = error.message || 'Ошибка подтверждения';
+            
+            // Если ошибка сети
+            if (errorMessage.includes('Network') || errorMessage.includes('fetch') || errorMessage.includes('сети')) {
+                errorMessage = 'Ошибка сети. Проверьте подключение и попробуйте снова';
+            }
+            
+            // Если ошибка от сервера, используем данные из error.data
+            if (error.data) {
+                errorMessage = error.data.error || error.data.message || errorMessage;
+            }
+            
+            this.showToast(errorMessage, 'error');
+            if (codeError) {
+                codeError.textContent = errorMessage;
+                codeError.style.display = 'block';
+            }
+            return false;
+        }
+    }
+    
+    async resendEmailChangeCode() {
+        if (!this.pendingEmailChange) {
+            this.showToast('Ошибка: email не найден. Начните смену email заново', 'error');
+            return false;
+        }
+        
+        const resendBtn = document.getElementById('resend-email-change-btn');
+        if (resendBtn && resendBtn.disabled) {
+            return false;
+        }
+        
+        try {
+            showLoadingIndicator();
+            const response = await safeFetch(`${this.API_BASE_URL}/profile/change-email`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${this.token}`
+                },
+                body: JSON.stringify({ email: this.pendingEmailChange })
+            });
+            
+            const data = await response.json();
+            hideLoadingIndicator();
+            
+            // Проверяем статус ответа
+            if (!response.ok) {
+                const errorMsg = data?.error || data?.message || 'Ошибка отправки кода';
+                this.showToast(errorMsg, 'error');
+                return false;
+            }
+            
+            if (data.success) {
+                this.showToast('Новый код отправлен на email', 'success');
+                this.startResendEmailChangeTimer();
+                return true;
+            } else {
+                const errorMsg = data.error || data.message || 'Ошибка отправки кода';
+                this.showToast(errorMsg, 'error');
+                return false;
+            }
+        } catch (error) {
+            hideLoadingIndicator();
+            
+            // Улучшенная обработка ошибок
+            let errorMessage = error.message || 'Ошибка отправки кода';
+            
+            // Если ошибка сети
+            if (errorMessage.includes('Network') || errorMessage.includes('fetch') || errorMessage.includes('сети')) {
+                errorMessage = 'Ошибка сети. Проверьте подключение и попробуйте снова';
+            }
+            
+            // Если ошибка от сервера, используем данные из error.data
+            if (error.data) {
+                errorMessage = error.data.error || error.data.message || errorMessage;
+            }
+            
+            this.showToast(errorMessage, 'error');
+            return false;
+        }
+    }
+    
+    startResendEmailChangeTimer() {
+        const resendBtn = document.getElementById('resend-email-change-btn');
+        if (!resendBtn) return;
+        
+        let timer = 60;
+        resendBtn.disabled = true;
+        resendBtn.textContent = `Отправить код заново (${timer})`;
+        
+        if (this.resendEmailChangeTimer) {
+            clearInterval(this.resendEmailChangeTimer);
+        }
+        
+        this.resendEmailChangeTimer = setInterval(() => {
+            timer--;
+            resendBtn.textContent = `Отправить код заново (${timer})`;
+            
+            if (timer <= 0) {
+                clearInterval(this.resendEmailChangeTimer);
+                this.resendEmailChangeTimer = null;
+                resendBtn.textContent = 'Отправить код заново';
+                resendBtn.disabled = false;
+            }
+        }, 1000);
+    }
+    
+    cancelEmailChange() {
+        const emailForm = document.getElementById('edit-email-form');
+        const codeForm = document.getElementById('edit-email-code-form');
+        const emailInput = document.getElementById('edit-email-input');
+        const codeInput = document.getElementById('edit-email-code-input');
+        const codeError = document.getElementById('email-code-error');
+        
+        // Скрываем форму кода, показываем форму email
+        if (codeForm) codeForm.style.display = 'none';
+        if (emailForm) emailForm.style.display = 'block';
+        
+        // Очищаем поля
+        if (emailInput) emailInput.value = '';
+        if (codeInput) codeInput.value = '';
+        if (codeError) {
+            codeError.textContent = '';
+            codeError.style.display = 'none';
+        }
+        
+        // Очищаем таймер
+        if (this.resendEmailChangeTimer) {
+            clearInterval(this.resendEmailChangeTimer);
+            this.resendEmailChangeTimer = null;
+        }
+        
+        // Очищаем pendingEmailChange
+        this.pendingEmailChange = null;
+        
+        // Сбрасываем кнопку
+        const resendBtn = document.getElementById('resend-email-change-btn');
+        if (resendBtn) {
+            resendBtn.textContent = 'Отправить код заново';
+            resendBtn.disabled = false;
+        }
+    }
+    
     async deleteAccount() {
         // Первое подтверждение
         const firstConfirm = await this.showConfirmDialog(
@@ -3505,11 +3865,23 @@ function saveProfileField(field) {
 }
 
 function cancelEdit(field) {
-    const form = document.getElementById(`edit-${field}-form`);
-    if (form) {
-        form.style.display = 'none';
-        const inputs = form.querySelectorAll('input');
-        inputs.forEach(input => input.value = '');
+    if (field === 'email') {
+        // Для email используем специальную функцию отмены
+        if (shop) {
+            shop.cancelEmailChange();
+        }
+        // Также скрываем форму ввода email
+        const emailForm = document.getElementById('edit-email-form');
+        if (emailForm) {
+            emailForm.style.display = 'none';
+        }
+    } else {
+        const form = document.getElementById(`edit-${field}-form`);
+        if (form) {
+            form.style.display = 'none';
+            const inputs = form.querySelectorAll('input');
+            inputs.forEach(input => input.value = '');
+        }
     }
 }
 
