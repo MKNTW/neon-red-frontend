@@ -487,7 +487,9 @@ export class AdminModule {
         const file = fileInput.files[0];
 
         try {
-            let finalImageUrl = imageUrl || 'https://via.placeholder.com/300';
+            // Используем пустую строку вместо placeholder, если нет изображения
+            // Сервер или клиент должен обработать отсутствие изображения
+            let finalImageUrl = imageUrl || null;
             
             // Если загружен файл, используем универсальный роут для загрузки
             if (file) {
@@ -500,19 +502,26 @@ export class AdminModule {
             }
             
             // Создаем товар с полученным URL изображения
+            // Если изображения нет, используем null вместо placeholder
+            const productData = {
+                title,
+                description,
+                price,
+                quantity
+            };
+            
+            // Добавляем image_url только если он есть
+            if (finalImageUrl) {
+                productData.image_url = finalImageUrl;
+            }
+            
             const productResponse = await safeFetch(`${this.shop.API_BASE_URL}/admin/products`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${this.shop.token}`
                 },
-                body: JSON.stringify({
-                    title,
-                    description,
-                    price,
-                    quantity,
-                    image_url: finalImageUrl
-                })
+                body: JSON.stringify(productData)
             });
             
             if (!productResponse || !productResponse.ok) {

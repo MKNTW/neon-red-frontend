@@ -144,11 +144,39 @@ export class CartModule {
             fieldContent.style.cssText = 'align-items: flex-start; gap: 15px;';
             
             const img = document.createElement('img');
-            img.src = item.image_url || 'https://via.placeholder.com/80';
             img.alt = escapeAttr(item.title);
             img.loading = 'lazy';
-            img.style.cssText = 'width: 80px; height: 80px; object-fit: cover; border-radius: 12px; border: 2px solid var(--neon-red); flex-shrink: 0;';
-            img.onerror = function() { this.src = 'https://via.placeholder.com/80'; };
+            img.style.cssText = 'width: 90px; height: 90px; object-fit: cover; border-radius: 14px; border: 3px solid var(--neon-red); flex-shrink: 0; display: none;';
+            
+            const imageFallback = document.createElement('div');
+            imageFallback.className = 'cart-item-image-fallback';
+            imageFallback.style.cssText = 'width: 90px; height: 90px; min-width: 90px; border-radius: 14px; border: 3px solid var(--neon-red); flex-shrink: 0; background: linear-gradient(135deg, var(--neon-red), var(--neon-pink)); display: flex; align-items: center; justify-content: center; font-size: 2rem; font-weight: 900; color: white; text-shadow: 0 0 10px rgba(0, 0, 0, 0.5); box-shadow: 0 0 20px rgba(255, 0, 51, 0.5);';
+            imageFallback.textContent = (item.title || '?').charAt(0).toUpperCase();
+            
+            if (item.image_url && item.image_url.trim() && !item.image_url.includes('via.placeholder.com')) {
+                const imageUrl = item.image_url.trim();
+                if (imageUrl && imageUrl.startsWith('http')) {
+                    img.src = imageUrl;
+                    img.style.display = 'block';
+                    imageFallback.style.display = 'none';
+                    
+                    img.onerror = function() {
+                        this.style.display = 'none';
+                        imageFallback.style.display = 'flex';
+                    };
+                    
+                    img.onload = function() {
+                        this.style.display = 'block';
+                        imageFallback.style.display = 'none';
+                    };
+                } else {
+                    img.style.display = 'none';
+                    imageFallback.style.display = 'flex';
+                }
+            } else {
+                img.style.display = 'none';
+                imageFallback.style.display = 'flex';
+            }
             
             const content = document.createElement('div');
             content.className = 'cart-item-content';
@@ -200,6 +228,7 @@ export class CartModule {
             content.appendChild(controls);
             
             fieldContent.appendChild(img);
+            fieldContent.appendChild(imageFallback);
             fieldContent.appendChild(content);
             
             div.appendChild(fieldContent);
