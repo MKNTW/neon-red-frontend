@@ -146,6 +146,10 @@ export class NeonShop {
         if (modal) {
             modal.style.display = 'block';
             document.body.style.overflow = 'hidden';
+            // Устанавливаем aria-hidden после открытия
+            setTimeout(() => {
+                modal.setAttribute('aria-hidden', 'false');
+            }, 0);
             this.cartModule.renderCart();
         }
     }
@@ -153,6 +157,13 @@ export class NeonShop {
     closeCartModal() {
         const modal = document.getElementById('cart-modal');
         if (modal) {
+            // Убираем фокус с элементов внутри модального окна перед закрытием
+            const activeElement = document.activeElement;
+            if (modal.contains(activeElement)) {
+                activeElement.blur();
+            }
+            // Устанавливаем aria-hidden перед закрытием
+            modal.setAttribute('aria-hidden', 'true');
             modal.style.display = 'none';
             document.body.style.overflow = '';
         }

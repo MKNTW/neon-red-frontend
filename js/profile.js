@@ -13,6 +13,10 @@ export class ProfileModule {
         if (modal) {
             modal.style.display = 'block';
             document.body.style.overflow = 'hidden';
+            // Устанавливаем aria-hidden после открытия
+            setTimeout(() => {
+                modal.setAttribute('aria-hidden', 'false');
+            }, 0);
             this.loadProfileData();
             this.loadOrders();
             this.setupProfileEventListeners();
@@ -59,6 +63,13 @@ export class ProfileModule {
     closeProfileModal() {
         const modal = document.getElementById('profile-modal');
         if (modal) {
+            // Убираем фокус с элементов внутри модального окна перед закрытием
+            const activeElement = document.activeElement;
+            if (modal.contains(activeElement)) {
+                activeElement.blur();
+            }
+            // Устанавливаем aria-hidden перед закрытием
+            modal.setAttribute('aria-hidden', 'true');
             modal.style.display = 'none';
             document.body.style.overflow = '';
         }

@@ -16,6 +16,10 @@ export class AdminModule {
         if (modal) {
             modal.style.display = 'block';
             document.body.style.overflow = 'hidden';
+            // Устанавливаем aria-hidden после открытия модального окна
+            setTimeout(() => {
+                modal.setAttribute('aria-hidden', 'false');
+            }, 0);
             await this.loadAdminProducts();
         }
     }
@@ -23,6 +27,13 @@ export class AdminModule {
     closeAdminPanel() {
         const modal = document.getElementById('admin-modal');
         if (modal) {
+            // Убираем фокус с элементов внутри модального окна перед закрытием
+            const activeElement = document.activeElement;
+            if (modal.contains(activeElement)) {
+                activeElement.blur();
+            }
+            // Устанавливаем aria-hidden перед закрытием
+            modal.setAttribute('aria-hidden', 'true');
             modal.style.display = 'none';
             document.body.style.overflow = '';
         }
@@ -117,6 +128,7 @@ export class AdminModule {
         }
         
         modal.style.display = 'block';
+        document.body.style.overflow = 'hidden';
         
         // Загружаем данные товара
         try {
@@ -164,9 +176,18 @@ export class AdminModule {
                     if (removeBtn) removeBtn.style.display = 'block';
                 }
             };
+            
+            // Устанавливаем aria-hidden после загрузки данных и установки фокуса
+            setTimeout(() => {
+                modal.setAttribute('aria-hidden', 'false');
+                const firstInput = document.getElementById('edit-product-title');
+                if (firstInput) firstInput.focus();
+            }, 100);
         } catch (error) {
             showToast(error.message || 'Ошибка загрузки товара', 'error');
             console.error('Edit product error:', error);
+            // Закрываем модальное окно при ошибке
+            this.closeEditProductModal();
         }
     }
 
@@ -307,6 +328,7 @@ export class AdminModule {
         }
         
         modal.style.display = 'block';
+        document.body.style.overflow = 'hidden';
         
         // Очищаем форму
         document.getElementById('new-product-title').value = '';
@@ -339,6 +361,13 @@ export class AdminModule {
                 if (removeBtn) removeBtn.style.display = 'block';
             }
         };
+        
+        // Устанавливаем aria-hidden после открытия и установки фокуса
+        setTimeout(() => {
+            modal.setAttribute('aria-hidden', 'false');
+            const firstInput = document.getElementById('new-product-title');
+            if (firstInput) firstInput.focus();
+        }, 100);
         
         // Обновление превью при вводе URL
         if (urlInput) {
@@ -451,14 +480,30 @@ export class AdminModule {
     closeEditProductModal() {
         const modal = document.getElementById('edit-product-modal');
         if (modal) {
+            // Убираем фокус с элементов внутри модального окна перед закрытием
+            const activeElement = document.activeElement;
+            if (modal.contains(activeElement)) {
+                activeElement.blur();
+            }
+            // Устанавливаем aria-hidden перед закрытием
+            modal.setAttribute('aria-hidden', 'true');
             modal.style.display = 'none';
+            document.body.style.overflow = '';
         }
     }
 
     closeAddProductModal() {
         const modal = document.getElementById('add-product-modal');
         if (modal) {
+            // Убираем фокус с элементов внутри модального окна перед закрытием
+            const activeElement = document.activeElement;
+            if (modal.contains(activeElement)) {
+                activeElement.blur();
+            }
+            // Устанавливаем aria-hidden перед закрытием
+            modal.setAttribute('aria-hidden', 'true');
             modal.style.display = 'none';
+            document.body.style.overflow = '';
         }
     }
 

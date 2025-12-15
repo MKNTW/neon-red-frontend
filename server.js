@@ -2092,6 +2092,71 @@ app.post('/api/admin/products', authenticateToken, authenticateAdmin, async (req
     }
 });
 
+// Получить один товар для админа (для редактирования)
+app.get('/api/admin/products/:id', authenticateToken, authenticateAdmin, async (req, res) => {
+    try {
+        const productId = parseInt(req.params.id);
+        if (isNaN(productId)) {
+            return res.status(400).json({ error: 'Неверный ID товара' });
+        }
+        
+        const { data: product, error } = await supabase
+            .from('products')
+            .select('*')
+            .eq('id', productId)
+            .single();
+            
+        if (error) {
+            if (error.code === 'PGRST116') {
+                return res.status(404).json({ error: 'Товар не найден' });
+            }
+            throw error;
+        }
+        
+        if (!product) {
+            return res.status(404).json({ error: 'Товар не найден' });
+        }
+        
+        // Формируем image_url так же, как в списке товаров
+        const supabaseUrl = process.env.SUPABASE_URL || 'https://peoudeeodcorbigjkxmd.supabase.co';
+        let imageUrl = null;
+        
+        if (product.image_url && product.image_url.trim() !== '' && product.image_url.trim().startsWith('http')) {
+            imageUrl = product.image_url.trim();
+        } else if (product.image_path && product.image_path.trim() !== '') {
+            const imagePath = product.image_path.trim();
+            let cleanPath = imagePath.startsWith('/') ? imagePath.substring(1) : imagePath;
+            
+            if (cleanPath.includes('storage/v1/object/public/')) {
+                const match = cleanPath.match(/storage\/v1\/object\/public\/[^\/]+\/(.+)$/);
+                if (match) {
+                    cleanPath = match[1];
+                }
+            }
+            
+            if (!cleanPath.startsWith('products/') && !cleanPath.startsWith('avatars/')) {
+                cleanPath = `products/${cleanPath}`;
+            }
+            imageUrl = `${supabaseUrl}/storage/v1/object/public/product-images/${cleanPath}`;
+        }
+        
+        res.json({
+            id: product.id,
+            title: product.title,
+            description: product.description,
+            price: product.price,
+            quantity: product.quantity,
+            category: product.category,
+            image_url: imageUrl,
+            created_at: product.created_at
+        });
+        
+    } catch (error) {
+        console.error('Get product error:', error);
+        res.status(500).json({ error: 'Ошибка получения товара' });
+    }
+});
+
 // Обновить товар (админ)
 app.put('/api/admin/products/:id', authenticateToken, authenticateAdmin, async (req, res) => {
     try {

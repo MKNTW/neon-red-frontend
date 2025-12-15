@@ -36,6 +36,8 @@ export class AuthModule {
                 const input = document.getElementById('login-username') || 
                              document.getElementById('register-username');
                 if (input) input.focus();
+                // Устанавливаем aria-hidden после установки фокуса
+                modal.setAttribute('aria-hidden', 'false');
             }, 300);
         }
     }
@@ -43,6 +45,13 @@ export class AuthModule {
     closeAuthModal() {
         const modal = document.getElementById('auth-modal');
         if (modal) {
+            // Убираем фокус с элементов внутри модального окна перед закрытием
+            const activeElement = document.activeElement;
+            if (modal.contains(activeElement)) {
+                activeElement.blur();
+            }
+            // Устанавливаем aria-hidden перед закрытием
+            modal.setAttribute('aria-hidden', 'true');
             modal.style.display = 'none';
             document.body.style.overflow = '';
         }
@@ -658,7 +667,10 @@ export class AuthModule {
             return false;
         }
         
-        if (!this.pendingVerificationEmail) {
+        // Используем email из pendingVerificationEmail или из pendingRegistrationUser
+        const emailToUse = this.pendingVerificationEmail || this.pendingRegistrationUser?.email;
+        
+        if (!emailToUse) {
             showToast('Ошибка: email не найден. Начните регистрацию заново', 'error');
             this.currentRegisterStep = 2;
             this.updateRegisterStepDisplay();
@@ -937,6 +949,13 @@ export class AuthModule {
         modal.style.display = 'block';
         document.body.style.overflow = 'hidden';
         
+        // Устанавливаем aria-hidden после открытия
+        setTimeout(() => {
+            modal.setAttribute('aria-hidden', 'false');
+            const emailInput = document.getElementById('forgot-email');
+            if (emailInput) emailInput.focus();
+        }, 100);
+        
         this.resetForgotPasswordForms();
     }
     
@@ -944,6 +963,13 @@ export class AuthModule {
         const modal = document.getElementById('forgot-password-modal');
         if (!modal) return;
         
+        // Убираем фокус с элементов внутри модального окна перед закрытием
+        const activeElement = document.activeElement;
+        if (modal.contains(activeElement)) {
+            activeElement.blur();
+        }
+        // Устанавливаем aria-hidden перед закрытием
+        modal.setAttribute('aria-hidden', 'true');
         modal.style.display = 'none';
         document.body.style.overflow = '';
         
