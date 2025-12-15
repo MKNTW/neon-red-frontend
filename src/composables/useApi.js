@@ -111,9 +111,12 @@ export function useApi() {
     throw lastError || new Error('Неизвестная ошибка')
   }
 
-  async function request(endpoint, options = {}) {
+  async function request(endpoint, options = {}, retryCount = 0) {
+
+  async function request(endpoint, options = {}, retryCount = 0) {
     const url = `${API_BASE_URL}${endpoint}`
     const token = localStorage.getItem('token')
+    const maxRetries = options.maxRetries !== undefined ? options.maxRetries : 1
     
     // Для FormData не устанавливаем Content-Type, браузер сделает это сам
     const isFormData = options.body instanceof FormData
@@ -162,11 +165,25 @@ export function useApi() {
         }
         const connectionError = new Error('Не удалось подключиться к серверу')
         connectionError.isConnectionError = true
-        throw connectionError
+        error.retryable = true
+        throw error
       }
       
+      // Для других ошибок показываем понятное сообщение
       const errorMessage = error.data?.error || error.data?.message || error.message || 'Ошибка запроса'
+      
+      // Определяем, можно ли повторить запрос
+      const isRetryable = error.status >= 500 || error.status === 0 || isConnectionError
+      
+      if (isRetryable && retryCount < maxRetries) {
+        // Автоматический retry для серверных ошибок
+        await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1)))
+        return request(endpoint, options, retryCount + 1)
+      }
+      
+      // Показываем ошибку пользователю
       showToast(errorMessage, 'error')
+      error.retryable = isRetryable && retryCount >= maxRetries
       throw error
     }
   }

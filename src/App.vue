@@ -45,7 +45,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { useAuth } from './composables/useAuth'
 import { useCart } from './composables/useCart'
 import { useProducts } from './composables/useProducts'
@@ -59,8 +59,8 @@ import CartModal from './components/CartModal.vue'
 import ProfileModal from './components/ProfileModal.vue'
 import AdminModal from './components/AdminModal.vue'
 
-const { isAuthenticated, isAdmin, validateToken } = useAuth()
-const { addToCart, syncCart } = useCart()
+const { isAuthenticated, isAdmin, validateToken, user } = useAuth()
+const { addToCart, syncCart, clearCart } = useCart()
 const { products, loading, currentPage, totalPages, loadProducts } = useProducts()
 
 const showAuthModal = ref(false)
@@ -115,8 +115,22 @@ function handlePageChange(page) {
   loadProducts(page, false)
 }
 
+// Автоматическое обновление при изменении статуса аутентификации
+watch(isAuthenticated, async (newVal) => {
+  if (newVal) {
+    // Пользователь вошел - загружаем товары и синхронизируем корзину
+    await loadProducts(1, false)
+    syncCart()
+  } else {
+    // Пользователь вышел - очищаем корзину
+    clearCart()
+  }
+})
+
 function handleAuthSuccess() {
+  // Дополнительная загрузка при успешной авторизации
   loadProducts(1, false)
+  syncCart()
 }
 
 async function handleCheckout() {

@@ -28,12 +28,12 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import Modal from './Modal.vue'
 import LoginForm from './LoginForm.vue'
 import RegisterForm from './RegisterForm.vue'
 
-defineProps({
+const props = defineProps({
   modelValue: {
     type: Boolean,
     default: false
@@ -43,6 +43,14 @@ defineProps({
 const emit = defineEmits(['update:modelValue', 'open-forgot-password', 'success'])
 
 const isLogin = ref(true)
+
+// Сбрасываем состояние при закрытии модалки
+watch(() => props.modelValue, (newVal) => {
+  if (!newVal) {
+    // При закрытии всегда возвращаемся к форме входа
+    isLogin.value = true
+  }
+})
 
 function handleLoginSuccess() {
   emit('success')

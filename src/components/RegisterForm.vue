@@ -439,14 +439,15 @@ async function handleSubmit() {
 
 <style scoped>
 .register-form-steps {
-  max-width: 500px;
-  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
 }
 
 .register-step {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 20px;
   animation: fadeIn 0.3s ease-in;
 }
 
@@ -469,62 +470,51 @@ async function handleSubmit() {
 
 .input-group label {
   color: var(--text-primary);
+  font-size: 0.9rem;
   font-weight: 600;
-  font-size: 0.95rem;
-  margin-bottom: 4px;
 }
 
 .input-group input {
-  width: 100%;
-  padding: 14px 18px;
+  padding: 12px 16px;
   background: rgba(255, 255, 255, 0.05);
   border: 2px solid var(--border-color);
-  border-radius: 12px;
+  border-radius: 10px;
   color: var(--text-primary);
   font-size: 1rem;
-  transition: all 0.3s;
   font-family: inherit;
+  transition: all 0.3s;
 }
 
 .input-group input:focus {
   outline: none;
   border-color: var(--neon-red);
-  background: rgba(255, 255, 255, 0.08);
-  box-shadow: 0 0 20px rgba(255, 0, 51, 0.2);
-}
-
-.input-group input::placeholder {
-  color: var(--text-secondary);
-  opacity: 0.6;
+  box-shadow: 0 0 15px rgba(255, 0, 51, 0.3);
 }
 
 .step-buttons {
   display: flex;
   gap: 12px;
-  margin-top: 8px;
 }
 
-.step-buttons .auth-btn {
-  flex: 1;
+.auth-btn {
   padding: 14px 24px;
-  font-size: 1rem;
-  font-weight: 600;
-  border-radius: 12px;
-  transition: all 0.3s;
-  cursor: pointer;
   border: none;
+  border-radius: 12px;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.3s;
   font-family: inherit;
 }
 
 .primary-btn {
-  background: linear-gradient(135deg, var(--neon-red), var(--neon-pink));
+  background: var(--neon-red);
   color: white;
-  box-shadow: 0 4px 15px rgba(255, 0, 51, 0.3);
 }
 
 .primary-btn:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(255, 0, 51, 0.4);
+  background: var(--neon-pink);
+  box-shadow: 0 0 20px rgba(255, 0, 51, 0.5);
 }
 
 .primary-btn:disabled {
@@ -541,13 +531,12 @@ async function handleSubmit() {
 .secondary-btn:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.15);
   border-color: var(--neon-red);
-  box-shadow: 0 0 15px rgba(255, 0, 51, 0.2);
+  box-shadow: 0 0 15px rgba(255, 0, 51, 0.3);
 }
 
 .skip-btn {
   background: rgba(255, 255, 255, 0.05);
   color: var(--text-secondary);
-  border: 2px solid transparent;
 }
 
 .skip-btn:hover:not(:disabled) {
@@ -558,73 +547,38 @@ async function handleSubmit() {
 .verification-hint {
   color: var(--text-secondary);
   font-size: 0.9rem;
-  margin-bottom: 12px;
-  padding: 12px;
-  background: rgba(255, 0, 51, 0.1);
-  border-radius: 8px;
-  border-left: 3px solid var(--neon-red);
+  margin-bottom: 10px;
 }
 
 .verification-hint strong {
   color: var(--neon-red);
-  font-weight: 700;
 }
 
 .input-error {
   color: var(--neon-red);
   font-size: 0.85rem;
-  margin-top: 6px;
-  padding: 8px 12px;
-  background: rgba(255, 0, 51, 0.1);
-  border-radius: 8px;
-  border-left: 3px solid var(--neon-red);
-  animation: shake 0.3s ease;
-}
-
-@keyframes shake {
-  0%, 100% { transform: translateX(0); }
-  25% { transform: translateX(-5px); }
-  75% { transform: translateX(5px); }
+  margin-top: 5px;
 }
 
 .password-hint {
   color: var(--text-secondary);
   font-size: 0.85rem;
-  margin-top: 6px;
-  font-style: italic;
+  margin-top: 5px;
 }
 
 .resend-container {
   text-align: center;
-  margin-top: 20px;
-  padding-top: 20px;
-  border-top: 1px solid var(--border-color);
+  margin-top: 15px;
 }
 
 .resend-btn {
   font-size: 0.9rem;
-  padding: 10px 20px;
-  background: transparent;
-  color: var(--text-secondary);
-  border: 1px dashed var(--border-color);
-}
-
-.resend-btn:hover:not(:disabled) {
-  color: var(--neon-red);
-  border-color: var(--neon-red);
-  background: rgba(255, 0, 51, 0.05);
-}
-
-.resend-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+  padding: 8px 16px;
 }
 
 .auth-switch {
-  margin-top: 24px;
   text-align: center;
-  padding-top: 20px;
-  border-top: 1px solid var(--border-color);
+  margin-top: 10px;
 }
 
 .auth-switch p {
@@ -633,14 +587,13 @@ async function handleSubmit() {
 }
 
 .auth-switch a {
-  color: var(--neon-red);
+  color: var(--neon-blue);
   text-decoration: none;
-  font-weight: 600;
-  transition: all 0.3s;
+  transition: color 0.3s;
 }
 
 .auth-switch a:hover {
-  text-shadow: 0 0 10px rgba(255, 0, 51, 0.5);
+  color: var(--neon-red);
 }
 </style>
 
