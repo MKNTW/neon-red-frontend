@@ -77,19 +77,76 @@
       />
       
       <div v-if="activeTab === 'users'" class="admin-section">
-        <h3>Пользователи</h3>
+        <div class="admin-section-header">
+          <h3>Пользователи</h3>
+        </div>
         <div class="admin-list-container">
-          <div class="empty-state">
-            <p>Функция будет реализована</p>
+          <div v-if="adminUsers.length === 0 && !loadingUsers" class="empty-state">
+            <p>Пользователей пока нет</p>
+          </div>
+          <div v-else-if="loadingUsers" class="loading-state">
+            <p>Загрузка...</p>
+          </div>
+          <div v-else class="admin-list">
+            <div
+              v-for="user in adminUsers"
+              :key="user.id"
+              class="admin-item"
+            >
+              <div class="admin-item-content">
+                <h4>{{ user.username }}</h4>
+                <p>{{ user.email }}</p>
+                <p v-if="user.fullName">{{ user.fullName }}</p>
+                <p>
+                  <span :class="user.isAdmin ? 'admin-badge' : ''">
+                    {{ user.isAdmin ? '👑 Администратор' : '👤 Пользователь' }}
+                  </span>
+                </p>
+                <p>Заказов: {{ user.ordersCount || 0 }}</p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
       
       <div v-if="activeTab === 'orders'" class="admin-section">
-        <h3>Заказы</h3>
+        <div class="admin-section-header">
+          <h3>Заказы</h3>
+        </div>
         <div class="admin-list-container">
-          <div class="empty-state">
-            <p>Функция будет реализована</p>
+          <div v-if="adminOrders.length === 0 && !loadingOrders" class="empty-state">
+            <p>Заказов пока нет</p>
+          </div>
+          <div v-else-if="loadingOrders" class="loading-state">
+            <p>Загрузка...</p>
+          </div>
+          <div v-else class="admin-list">
+            <div
+              v-for="order in adminOrders"
+              :key="order.id"
+              class="admin-item order-item"
+            >
+              <div class="admin-item-content">
+                <h4>Заказ #{{ order.id.substring(0, 8) }}</h4>
+                <p>Пользователь: {{ order.user?.username || order.user_id || 'Неизвестно' }}</p>
+                <p>Дата: {{ formatDate(order.created_at) }}</p>
+                <p>Сумма: <strong>{{ order.total_amount || order.total || 0 }} ₽</strong></p>
+                <p>Статус: 
+                  <select 
+                    :value="order.status" 
+                    @change="updateOrderStatus(order.id, $event.target.value)"
+                    class="status-select"
+                  >
+                    <option value="pending">Ожидает обработки</option>
+                    <option value="processing">В обработке</option>
+                    <option value="shipped">Отправлен</option>
+                    <option value="delivered">Доставлен</option>
+                    <option value="cancelled">Отменен</option>
+                  </select>
+                </p>
+                <p v-if="order.shipping_address">Адрес: {{ order.shipping_address }}</p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -119,9 +176,13 @@ const { showToast } = useToast()
 
 const activeTab = ref('products')
 const adminProducts = ref([])
+const adminUsers = ref([])
+const adminOrders = ref([])
 const showEditModal = ref(false)
 const editingProduct = ref(null)
 const loading = ref(false)
+const loadingUsers = ref(false)
+const loadingOrders = ref(false)
 
 const tabs = [
   { id: 'products', label: 'Товары', icon: '📦' },
@@ -132,6 +193,21 @@ const tabs = [
 watch(() => props.modelValue, (newVal) => {
   if (newVal) {
     loadProducts()
+    if (activeTab.value === 'users') {
+      loadUsers()
+    } else if (activeTab.value === 'orders') {
+      loadOrders()
+    }
+  }
+})
+
+watch(activeTab, (newTab) => {
+  if (props.modelValue) {
+    if (newTab === 'users' && adminUsers.value.length === 0) {
+      loadUsers()
+    } else if (newTab === 'orders' && adminOrders.value.length === 0) {
+      loadOrders()
+    }
   }
 })
 
@@ -181,6 +257,57 @@ async function confirmDelete() {
 
 function handleProductSaved() {
   loadProducts()
+}
+
+async function loadUsers() {
+  loadingUsers.value = true
+  try {
+    const data = await request('/admin/users')
+    adminUsers.value = Array.isArray(data) ? data : []
+  } catch (error) {
+    showToast('Ошибка загрузки пользователей', 'error')
+    adminUsers.value = []
+  } finally {
+    loadingUsers.value = false
+  }
+}
+
+async function loadOrders() {
+  loadingOrders.value = true
+  try {
+    const data = await request('/admin/orders')
+    adminOrders.value = Array.isArray(data) ? data : []
+  } catch (error) {
+    showToast('Ошибка загрузки заказов', 'error')
+    adminOrders.value = []
+  } finally {
+    loadingOrders.value = false
+  }
+}
+
+function formatDate(dateString) {
+  if (!dateString) return 'Не указана'
+  return new Date(dateString).toLocaleDateString('ru-RU', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+}
+
+async function updateOrderStatus(orderId, newStatus) {
+  try {
+    await request(`/admin/orders/${orderId}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ status: newStatus })
+    })
+    showToast('Статус заказа обновлен', 'success')
+    await loadOrders()
+  } catch (error) {
+    showToast(error.message || 'Ошибка обновления статуса', 'error')
+    await loadOrders() // Перезагружаем чтобы вернуть старый статус
+  }
 }
 </script>
 
@@ -332,6 +459,40 @@ function handleProductSaved() {
   text-align: center;
   padding: 40px 20px;
   color: var(--text-secondary);
+}
+
+.admin-badge {
+  display: inline-block;
+  padding: 4px 8px;
+  background: rgba(255, 0, 51, 0.2);
+  border: 1px solid var(--neon-red);
+  border-radius: 12px;
+  color: var(--neon-red);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.status-select {
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 2px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.status-select:focus {
+  outline: none;
+  border-color: var(--neon-red);
+  box-shadow: 0 0 10px rgba(255, 0, 51, 0.3);
+}
+
+.order-item {
+  flex-direction: column;
+  align-items: flex-start;
 }
 </style>
 

@@ -16,13 +16,14 @@
       :loading="loading"
       :current-page="currentPage"
       :total-pages="totalPages"
-      @open-auth="showAuthModal = true"
+      @open-auth="handleOpenAuth"
       @add-to-cart="handleAddToCart"
       @page-change="handlePageChange"
     />
 
     <AuthModal
       v-model="showAuthModal"
+      :initial-mode="authModalMode"
       @open-forgot-password="showForgotPasswordModal = true"
       @success="handleAuthSuccess"
     />
@@ -64,6 +65,7 @@ const { addToCart, syncCart, clearCart } = useCart()
 const { products, loading, currentPage, totalPages, loadProducts } = useProducts()
 
 const showAuthModal = ref(false)
+const authModalMode = ref('login')
 const showCartModal = ref(false)
 const showProfileModal = ref(false)
 const showAdminModal = ref(false)
@@ -107,6 +109,11 @@ onMounted(async () => {
   })
 })
 
+function handleOpenAuth(mode = 'login') {
+  authModalMode.value = mode
+  showAuthModal.value = true
+}
+
 function handleAddToCart(product) {
   addToCart(product)
 }
@@ -125,10 +132,12 @@ watch(isAuthenticated, async (newVal, oldVal) => {
     // Пользователь вышел - очищаем корзину
     clearCart()
   }
-})
+}, { immediate: false })
 
 async function handleAuthSuccess() {
   // Немедленная загрузка товаров после успешной авторизации
+  // Используем nextTick чтобы убедиться что isAuthenticated обновился
+  await new Promise(resolve => setTimeout(resolve, 100))
   await loadProducts(1, false)
   syncCart()
 }

@@ -139,6 +139,11 @@
       cancel-text="Отмена"
       @confirm="confirmDeleteAccount"
     />
+
+    <OrderDetailsModal
+      v-model="showOrderDetailsModal"
+      :order="selectedOrder"
+    />
   </Modal>
 </template>
 
@@ -148,6 +153,7 @@ import Modal from './Modal.vue'
 import ProfileField from './ProfileField.vue'
 import ProfileFieldEdit from './ProfileFieldEdit.vue'
 import ConfirmDialog from './ConfirmDialog.vue'
+import OrderDetailsModal from './OrderDetailsModal.vue'
 import { useAuth } from '../composables/useAuth'
 import { useApi } from '../composables/useApi'
 import { useToast } from '../composables/useToast'
@@ -289,8 +295,12 @@ async function handleAvatarUpload(event) {
   }
 }
 
+const showOrderDetailsModal = ref(false)
+const selectedOrder = ref(null)
+
 function showOrderDetails(order) {
-  showToast(`Заказ #${order.id.substring(0, 8)}`, 'info')
+  selectedOrder.value = order
+  showOrderDetailsModal.value = true
 }
 
 function handleLogout() {

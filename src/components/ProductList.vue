@@ -20,8 +20,11 @@
         <h2>🔒 Доступ ограничен</h2>
         <p>Для просмотра каталога товаров необходимо войти в систему или зарегистрироваться</p>
         <div class="login-prompt-actions">
-          <button @click="$emit('open-auth')" class="primary-btn">
+          <button @click="openAuthModal('login')" class="primary-btn">
             Войти
+          </button>
+          <button @click="openAuthModal('register')" class="secondary-btn">
+            Зарегистрироваться
           </button>
         </div>
       </div>
@@ -78,9 +81,13 @@ defineProps({
   }
 })
 
-defineEmits(['open-auth', 'add-to-cart', 'page-change'])
+const emit = defineEmits(['open-auth', 'add-to-cart', 'page-change'])
 
 const { isAuthenticated } = useAuth()
+
+function openAuthModal(mode = 'login') {
+  emit('open-auth', mode)
+}
 </script>
 
 <style scoped>

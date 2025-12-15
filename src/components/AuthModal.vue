@@ -37,6 +37,11 @@ const props = defineProps({
   modelValue: {
     type: Boolean,
     default: false
+  },
+  initialMode: {
+    type: String,
+    default: 'login',
+    validator: (value) => ['login', 'register'].includes(value)
   }
 })
 
@@ -44,11 +49,14 @@ const emit = defineEmits(['update:modelValue', 'open-forgot-password', 'success'
 
 const isLogin = ref(true)
 
-// Сбрасываем состояние при закрытии модалки
+// Сбрасываем состояние при закрытии модалки и обработка открытия с определенным режимом
 watch(() => props.modelValue, (newVal) => {
   if (!newVal) {
     // При закрытии всегда возвращаемся к форме входа
     isLogin.value = true
+  } else if (newVal && props.initialMode) {
+    // При открытии устанавливаем нужный режим
+    isLogin.value = props.initialMode === 'login'
   }
 })
 

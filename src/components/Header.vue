@@ -15,15 +15,6 @@
             <span class="btn-text">Профиль</span>
           </button>
           <button
-            v-else
-            @click="$emit('open-auth')"
-            class="header-btn auth-header-btn"
-            aria-label="Войти в аккаунт"
-            aria-haspopup="dialog"
-          >
-            Войти
-          </button>
-          <button
             v-if="isAuthenticated"
             @click="$emit('open-cart')"
             class="header-btn cart-header-btn"
