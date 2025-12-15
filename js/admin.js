@@ -309,8 +309,19 @@ export class AdminModule {
 
             showToast('Товар обновлен', 'success');
             this.closeEditProductModal();
+            
+            // Очищаем кэш товаров перед обновлением
+            try {
+                localStorage.removeItem('products_cache');
+                localStorage.removeItem('products_cache_timestamp');
+            } catch (e) {
+                console.warn('Cache clear error:', e);
+            }
+            
+            // Обновляем списки
             await this.loadAdminProducts();
-            await this.shop.productsModule.loadProducts();
+            // Обновляем список товаров с первой страницы без кэша
+            await this.shop.productsModule.loadProducts(1, false);
         } catch (error) {
             console.error('Product save error:', error);
             
@@ -339,8 +350,19 @@ export class AdminModule {
             });
 
             showToast('Товар удален', 'success');
+            
+            // Очищаем кэш товаров перед обновлением
+            try {
+                localStorage.removeItem('products_cache');
+                localStorage.removeItem('products_cache_timestamp');
+            } catch (e) {
+                console.warn('Cache clear error:', e);
+            }
+            
+            // Обновляем списки
             await this.loadAdminProducts();
-            await this.shop.productsModule.loadProducts();
+            // Обновляем список товаров с первой страницы без кэша
+            await this.shop.productsModule.loadProducts(1, false);
         } catch (error) {
             showToast(error.message, 'error');
             console.error('Delete product error:', error);

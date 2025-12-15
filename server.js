@@ -2706,6 +2706,37 @@ app.delete('/api/orders/:id', authenticateToken, async (req, res) => {
             return res.status(400).json({ error: 'Можно отменять только заказы со статусом "pending"' });
         }
         
+        // Получаем все товары из заказа для возврата на склад
+        const { data: orderItems, error: itemsError } = await supabase
+            .from('order_items')
+            .select('product_id, quantity')
+            .eq('order_id', orderId);
+        
+        if (itemsError) throw itemsError;
+        
+        // Возвращаем товары на склад
+        if (orderItems && orderItems.length > 0) {
+            for (const item of orderItems) {
+                // Увеличиваем количество товара на складе
+                const { data: product, error: productError } = await supabase
+                    .from('products')
+                    .select('quantity')
+                    .eq('id', item.product_id)
+                    .single();
+                
+                if (!productError && product) {
+                    const { error: updateQuantityError } = await supabase
+                        .from('products')
+                        .update({ quantity: product.quantity + item.quantity })
+                        .eq('id', item.product_id);
+                    
+                    if (updateQuantityError) {
+                        console.error(`Error restoring quantity for product ${item.product_id}:`, updateQuantityError);
+                    }
+                }
+            }
+        }
+        
         // Обновляем статус на cancelled
         const { data: cancelledOrder, error: updateError } = await supabase
             .from('orders')

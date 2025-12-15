@@ -73,6 +73,15 @@ export class CartModule {
         this.updateCartInfo();
         this.renderCart();
         showToast('Товар удалён из корзины', 'info', 2000);
+        
+        // Обновляем список товаров для отображения актуального количества
+        // (хотя количество не менялось, но обновление гарантирует актуальность данных)
+        if (this.shop.productsModule) {
+            // Обновляем без очистки кэша, т.к. количество не изменилось
+            this.shop.productsModule.loadProducts(1, true).catch(err => {
+                console.warn('Error refreshing products after cart removal:', err);
+            });
+        }
     }
 
     saveCart() {
@@ -229,6 +238,13 @@ export class CartModule {
         this.updateCartInfo();
         this.renderCart();
         showToast('Корзина очищена', 'info');
+        
+        // Обновляем список товаров для отображения актуального количества
+        if (this.shop.productsModule) {
+            this.shop.productsModule.loadProducts(1, true).catch(err => {
+                console.warn('Error refreshing products after cart clear:', err);
+            });
+        }
     }
 
     async checkout() {
