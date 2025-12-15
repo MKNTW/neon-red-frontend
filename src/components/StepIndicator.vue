@@ -49,7 +49,6 @@ defineProps({
   justify-content: center;
   margin-bottom: 30px;
   gap: 8px;
-  margin-top: 20px;
 }
 
 .step-item {
@@ -87,7 +86,7 @@ defineProps({
 }
 
 .step-line {
-  width: 30px;
+  width: 40px;
   height: 2px;
   background: var(--border-color);
   transition: all 0.3s;

@@ -150,6 +150,7 @@ const { isAuthenticated } = useAuth()
 .login-prompt {
   text-align: center;
   padding: 60px 20px;
+  margin-top: 100px;
   grid-column: 1/-1;
 }
 

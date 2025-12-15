@@ -116,20 +116,20 @@ function handlePageChange(page) {
 }
 
 // Автоматическое обновление при изменении статуса аутентификации
-watch(isAuthenticated, async (newVal) => {
-  if (newVal) {
-    // Пользователь вошел - загружаем товары и синхронизируем корзину
+watch(isAuthenticated, async (newVal, oldVal) => {
+  if (newVal && !oldVal) {
+    // Пользователь только что вошел - загружаем товары и синхронизируем корзину
     await loadProducts(1, false)
     syncCart()
-  } else {
+  } else if (!newVal && oldVal) {
     // Пользователь вышел - очищаем корзину
     clearCart()
   }
 })
 
-function handleAuthSuccess() {
-  // Дополнительная загрузка при успешной авторизации
-  loadProducts(1, false)
+async function handleAuthSuccess() {
+  // Немедленная загрузка товаров после успешной авторизации
+  await loadProducts(1, false)
   syncCart()
 }
 
